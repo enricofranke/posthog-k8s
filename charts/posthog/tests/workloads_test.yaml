@@ -1,0 +1,134 @@
+suite: workloads
+templates:
+  - workloads.yaml
+tests:
+  - it: renders web as a Deployment with the pinned posthog image and non-root security context
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 10001
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^posthog/posthog:[0-9a-f]{40}
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["./bin/docker-server"]
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: passes secrets by reference, never as plain values
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: SECRET_KEY
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: DATABASE_URL
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_KEY
+            value: ""
+          any: true
+
+  - it: routes a mapped secret key to the user's own Secret
+    set:
+      secrets.keys.DATABASE_URL: {secret: my-pg-app, key: uri}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: my-pg-app
+                key: uri
+
+  - it: rewrites compose hostnames to release-scoped services
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_URL
+            value: redis://RELEASE-NAME-posthog-redis7:6379/
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLICKHOUSE_HOST
+            value: RELEASE-NAME-posthog-clickhouse
+
+  - it: uses the external Postgres host and skips the bundled Redis when configured
+    set:
+      postgresql.external.host: pg.example.internal
+      redis.external.host: redis.example.internal
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGHOST
+            value: pg.example.internal
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: web
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: redis7
+          skipEmptyTemplates: true
+
+  - it: renders ClickHouse as a StatefulSet with a volume claim and the init container copying image assets
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: clickhouse
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 100Gi
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: copy-upstream
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: cp -r /code/posthog/user_scripts
+
+  - it: honours services.<name>.enabled=false
+    set:
+      services.browserless.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: browserless
+          skipEmptyTemplates: true

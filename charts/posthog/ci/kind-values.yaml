@@ -1,0 +1,79 @@
+# Values for the CI end-to-end run on kind (4 vCPU / 16 GB GitHub runner). Small footprint,
+# generated secrets, bundled datastores, no ingress: the smoke test port-forwards the router.
+posthog:
+  siteUrl: http://localhost:8080
+  publicUrl: http://localhost:8081
+  secureCookies: false
+  multiOrg: true
+  secrets:
+    secretKey: ci-only-secret-key-not-for-production-0123456789
+    encryptionSaltKeys: 00000000000000000000000000000000
+    browserlessToken: ci-browserless-token
+    internalApiSecret: ci-internal-api-secret
+
+router:
+  replicas: 1
+  podDisruptionBudget:
+    enabled: false
+
+postgresql:
+  auth:
+    password: ci-postgres-password
+  persistence:
+    size: 2Gi
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
+
+clickhouse:
+  users:
+    api: ci-api-pass
+    app: ci-app-pass
+    billing: ci-billing-pass
+    dictReader: ci-dict-reader-pass
+
+objectStorage:
+  bundled:
+    persistence:
+      size: 2Gi
+
+services:
+  web:
+    replicas: 1
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {memory: 2Gi}
+  browserless:
+    enabled: false
+  clickhouse:
+    persistence: {size: 5Gi}
+    resources:
+      requests: {cpu: 200m, memory: 1Gi}
+      limits: {memory: 4Gi}
+  kafka:
+    persistence: {size: 2Gi}
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {memory: 2Gi}
+    args:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://{{ include "posthog.serviceName" (list $ "kafka") }}:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://{{ include "posthog.serviceName" (list $ "kafka") }}:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr {{ include "posthog.serviceName" (list $ "kafka") }}:33145
+      - --advertise-rpc-addr {{ include "posthog.serviceName" (list $ "kafka") }}:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --set redpanda.empty_seed_starts_cluster=false
+      - --seeds {{ include "posthog.serviceName" (list $ "kafka") }}:33145
+      - --set redpanda.auto_create_topics_enabled=true
+  zookeeper:
+    persistence: {size: 1Gi}
+  redis7:
+    persistence: {size: 1Gi}

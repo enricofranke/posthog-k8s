@@ -1,0 +1,16 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+Full documentation, production examples and the upgrade process live in the
+[repository README](https://github.com/enricofranke/posthog-k8s#readme). Service definitions
+(images, env, ports) are generated into `upstream.yaml`; the values below layer on top of them.
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}

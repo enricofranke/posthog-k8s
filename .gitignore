@@ -1,0 +1,9 @@
+.cache/
+dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+tools/.venv/
+*.tgz
+.DS_Store

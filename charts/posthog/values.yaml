@@ -1,0 +1,240 @@
+# Default values for the posthog chart.
+# Service definitions (images, env, ports, probes) come from upstream.yaml, generated from
+# PostHog's hobby docker-compose. Everything here layers on top of that.
+
+global:
+  # -- Registry prefix for every image (e.g. a pull-through cache). Empty uses the upstream registries.
+  imageRegistry: ""
+  # -- Pull secrets applied to every pod.
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+# -- Extra labels on every resource.
+commonLabels: {}
+# -- Extra annotations on every pod.
+podAnnotations: {}
+
+images:
+  # -- Pin images to the digests recorded at sync time (repository:tag@sha256:...). Turn off to follow the tags.
+  pinDigests: true
+  # -- Per-image overrides keyed like upstream.yaml `images` (posthog, posthog-node, capture, clickhouse, ...).
+  # Example: posthog: {tag: release-1.140.0}
+  overrides: {}
+
+posthog:
+  # -- URL of the PostHog UI (SITE_URL). Cookies, links and CSRF are bound to it.
+  siteUrl: https://posthog.example.com
+  # -- URL browsers and SDKs send events to (the router's ingest listener). Defaults to siteUrl.
+  publicUrl: ""
+  # -- Allow more than one organization on the instance (MULTI_ORG_ENABLED).
+  multiOrg: false
+  # -- Set the Secure flag on session cookies. Keep true behind TLS.
+  secureCookies: true
+  # -- Do not report anonymous usage to PostHog Inc. (OPT_OUT_CAPTURE).
+  optOutCapture: false
+  # -- Where the browser sends CSP reports; empty disables reporting.
+  cspReportEndpoint: ""
+  # -- Existing Secret with keys SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET.
+  # Recommended for GitOps: the chart does not generate secrets when this is set.
+  existingSecret: ""
+  # -- Inline secrets (used only when existingSecret is empty). Empty values are generated on install
+  # and kept across upgrades via lookup. NOTE: `helm template` and Argo CD render without lookup, so
+  # set them explicitly or use existingSecret there.
+  secrets:
+    secretKey: ""
+    encryptionSaltKeys: ""
+    browserlessToken: ""
+    internalApiSecret: ""
+    anthropicApiKey: ""
+    openaiApiKey: ""
+
+secrets:
+  # -- Generate missing secret values at install time. Set false to fail instead of generating.
+  generate: true
+  # -- Route individual secret keys to an existing Secret: KEY: {secret: name, key: keyInSecret}.
+  # Keys: SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET, ANTHROPIC_API_KEY,
+  # OPENAI_API_KEY, DATABASE_URL, PGUSER, PGPASSWORD, CLICKHOUSE_API_PASSWORD, CLICKHOUSE_APP_PASSWORD,
+  # CLICKHOUSE_BILLING_PASSWORD, CLICKHOUSE_DICT_READER_PASSWORD, OBJECT_STORAGE_ACCESS_KEY_ID,
+  # OBJECT_STORAGE_SECRET_ACCESS_KEY, SESSION_RECORDING_ACCESS_KEY_ID, SESSION_RECORDING_SECRET_ACCESS_KEY.
+  keys: {}
+
+# PostgreSQL: bundled single instance or an external server (CloudNativePG, RDS, ...).
+postgresql:
+  # -- Deploy the bundled PostgreSQL StatefulSet. Fine for evaluation; use an operator in production.
+  bundled: true
+  image:
+    repository: postgres
+    tag: 15.12-alpine
+  auth:
+    username: posthog
+    # -- Empty generates a password on install.
+    password: ""
+    database: posthog
+  persistence:
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 2Gi}
+  external:
+    # -- Host of the external server (turns the bundled instance off when set).
+    host: ""
+    port: 5432
+    username: posthog
+    password: ""
+    database: posthog
+    # -- Existing Secret holding the connection: urlKey is a full postgres:// URL (CloudNativePG `uri`),
+    # passwordKey just the password. When urlKey is set it wins for DATABASE_URL.
+    existingSecret: ""
+    urlKey: ""
+    passwordKey: ""
+
+# ClickHouse: bundled single node (external clusters are a roadmap item).
+clickhouse:
+  users:
+    # -- Passwords for the application users in users.xml; empty values are generated.
+    api: ""
+    app: ""
+    billing: ""
+    dictReader: ""
+  external:
+    host: ""
+
+redis:
+  external:
+    host: ""
+    port: 6379
+
+valkey:
+  external:
+    host: ""
+
+kafka:
+  external:
+    # -- Comma-separated broker list; turns the bundled Redpanda off when set.
+    brokers: ""
+
+temporal:
+  database: temporal
+  visibilityDatabase: temporal_visibility
+  # -- Set true when the databases exist already (the PostgreSQL user has no CREATEDB).
+  skipDbCreate: false
+
+# Object storage for exports, symbol sets, AI blobs. S3-compatible.
+objectStorage:
+  # -- S3 endpoint, e.g. https://s3.eu-central-1.amazonaws.com. Empty uses the bundled SeaweedFS.
+  endpoint: ""
+  bucket: posthog
+  region: us-east-1
+  forcePathStyle: true
+  accessKeyId: ""
+  secretAccessKey: ""
+  existingSecret: ""
+  accessKeyIdKey: accessKeyId
+  secretAccessKeyKey: secretAccessKey
+  # Bundled SeaweedFS (single node, no replication): evaluation only.
+  bundled:
+    enabled: true
+    image:
+      repository: chrislusf/seaweedfs
+      tag: "4.29"
+    persistence:
+      size: 50Gi
+      storageClass: ""
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 1Gi}
+
+# Session replay blob storage. Defaults to objectStorage; set for a separate bucket/credentials.
+sessionReplay:
+  storage:
+    endpoint: ""
+    bucket: ""
+    region: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    existingSecret: ""
+    accessKeyIdKey: accessKeyId
+    secretAccessKeyKey: secretAccessKey
+
+# The router fronts everything: an `app` listener with the full UI/API and an `ingest` listener
+# that only forwards the SDK paths (so the login page never has to be public).
+router:
+  image: caddy:2.10-alpine
+  replicas: 2
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+  ports:
+    app: 8080
+    ingest: 8081
+  # -- Request headers removed on the ingest listener (identity headers a trusted proxy would set).
+  stripHeaders: [X-Forwarded-User, X-Forwarded-Groups, X-Forwarded-Email, X-Remote-User, X-Remote-Group, Authorization-Teleport]
+  ingest:
+    # -- Paths on the `web` service that SDKs need besides the dedicated ingestion services.
+    webPaths: ["/decide", "/decide/*", "/static/*", "/_health", "/report", "/report/*", "/robots.txt"]
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    # -- Hosts: `listener` is app or ingest. Defaults to siteUrl -> app and publicUrl -> ingest.
+    hosts: []
+    tls: []
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# Trusted-header login: log users in from headers set by an authenticating proxy (Teleport,
+# oauth2-proxy, Authelia, Pomerium). Requires the auth overlay image, see docs/auth-proxy.md.
+authProxy:
+  enabled: false
+  userHeader: X-Forwarded-User
+  groupsHeader: X-Forwarded-Groups
+  # -- Group -> organization membership mapping, e.g. {netcup-admins: {organizations: ["*"], level: admin}}
+  groups: {}
+
+# Per-service overrides keyed by upstream service name (see upstream.yaml). Every service accepts:
+# enabled, replicas, resources, env (list), podAnnotations, nodeSelector, tolerations, affinity,
+# topologySpreadConstraints, podSecurityContext, containerSecurityContext, readOnlyRootFilesystem,
+# persistence: {size, storageClass}, extraVolumes, extraVolumeMounts, priorityClassName.
+services:
+  web:
+    replicas: 2
+  browserless:
+    enabled: true
+  ingestion-traces:
+    enabled: true
+  livestream:
+    enabled: true
+  clickhouse:
+    persistence: {size: 100Gi, storageClass: ""}
+  kafka:
+    persistence: {size: 50Gi, storageClass: ""}
+  zookeeper:
+    persistence: {size: 5Gi, storageClass: ""}
+  redis7:
+    persistence: {size: 2Gi, storageClass: ""}
+
+migrations:
+  # -- Run `bin/migrate` as a Helm/Argo hook after install and upgrade.
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 3600
+
+networkPolicy:
+  # -- Default-deny ingress for chart pods; allow traffic inside the release and to the router.
+  enabled: false
+  # -- Extra selectors allowed to reach the router's app listener (e.g. an identity-aware proxy).
+  appIngressFrom: []
+  # -- Extra selectors allowed to reach the router's ingest listener (ingress controller, tunnel).
+  ingestIngressFrom: []
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+# -- Pod Security Standards level applied to the namespace when the chart creates it (see README).
+podSecurity: baseline

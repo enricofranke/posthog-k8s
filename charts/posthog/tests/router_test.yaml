@@ -1,0 +1,58 @@
+suite: router
+templates:
+  - router.yaml
+tests:
+  - it: builds an app listener and an ingest listener from the upstream routes
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    asserts:
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: ":8080 \\{"
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: ":8081 \\{"
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: "reverse_proxy RELEASE-NAME-posthog-capture:3000"
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: "reverse_proxy RELEASE-NAME-posthog-capture-logs:4318"
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: "-X-Forwarded-User"
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'respond "not found" 404'
+
+  - it: does not route to excluded upstream services
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    asserts:
+      - notMatchRegex:
+          path: data.Caddyfile
+          pattern: objectstorage:19000
+
+  - it: renders an Ingress with app and ingest hosts when enabled
+    set:
+      router.ingress.enabled: true
+      posthog.siteUrl: https://posthog.example.com
+      posthog.publicUrl: https://ph.example.com
+    documentSelector:
+      path: kind
+      value: Ingress
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: posthog.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.name
+          value: app
+      - equal:
+          path: spec.rules[1].host
+          value: ph.example.com
+      - equal:
+          path: spec.rules[1].http.paths[0].backend.service.port.name
+          value: ingest

@@ -1,0 +1,114 @@
+{{- /*
+Jobs: the migrate job (chart-defined, uses the web service's env) plus upstream jobs
+(kafka-init, asyncmigrationscheck). All run as Helm hooks; Argo CD maps them to Sync hooks.
+*/ -}}
+{{- $up := include "posthog.upstream" . | fromYaml -}}
+{{- $root := . -}}
+{{- $web := index $up.services "web" -}}
+{{- define "posthog.jobSpec" -}}
+{{- $root := index . 0 }}{{ $name := index . 1 }}{{ $svc := index . 2 }}{{ $command := index . 3 }}{{ $args := index . 4 }}
+{{- $ov := index $root.Values.services $name | default dict }}
+{{- $_ := set $svc "overrides" $ov }}
+  backoffLimit: {{ $root.Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ $root.Values.migrations.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "posthog.selectorLabels" (list $root $name) | nindent 8 }}
+      annotations:
+        {{- include "posthog.podAnnotations" (list $root $svc) | nindent 8 }}
+    spec:
+      {{- include "posthog.imagePullSecrets" $root | nindent 6 }}
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        {{- include "posthog.podSecurityContext" (list $root $svc) | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "posthog.image" (list $root $svc.image) | quote }}
+          imagePullPolicy: IfNotPresent
+          {{- with $command }}
+          command:
+            {{- range . }}
+            - {{ ternary (tpl . $root) . (contains "{{" .) | quote }}
+            {{- end }}
+          {{- end }}
+          {{- with $args }}
+          args:
+            {{- range . }}
+            - {{ ternary (tpl . $root) . (contains "{{" .) | quote }}
+            {{- end }}
+          {{- end }}
+          env:
+            {{- include "posthog.env" (list $root $name $svc.env) | nindent 12 }}
+            {{- with $ov.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml ($ov.resources | default $svc.resources) | nindent 12 }}
+          securityContext:
+            {{- include "posthog.containerSecurityContext" (list $root $svc) | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- range $svc.mounts }}
+            {{- if .file }}
+            - name: cfg
+              mountPath: {{ .path }}
+              subPath: {{ base .file }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- range $svc.mounts }}
+        {{- if .file }}
+        - name: cfg
+          configMap:
+            name: {{ include "posthog.configMapName" (list $root (dir .file)) }}
+        {{- end }}
+        {{- end }}
+{{- end -}}
+{{- if .Values.migrations.enabled }}
+{{- $migrate := deepCopy $web }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "posthog.serviceName" (list . "migrate") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "posthog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+{{ include "posthog.jobSpec" (list . "migrate" $migrate (list "./bin/migrate") (list)) }}
+{{- end }}
+{{- range $name, $svc := $up.services }}
+{{- if eq $svc.kind "job" }}
+{{- $ov := index $root.Values.services $name | default dict }}
+{{- if ternary $ov.enabled true (hasKey $ov "enabled") }}
+{{- $j := $svc.job }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "posthog.serviceName" (list $root $name) }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "posthog.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+  annotations:
+    helm.sh/hook: {{ $j.hook }}
+    helm.sh/hook-weight: {{ $j.weight | quote }}
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+{{ include "posthog.jobSpec" (list $root $name $svc $svc.command $svc.args) }}
+{{- end }}
+{{- end }}
+{{- end }}

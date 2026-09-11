@@ -1,0 +1,317 @@
+# Rules that turn PostHog's hobby compose into chart data. Everything upstream-specific that is
+# NOT derivable from the compose files lives here, so an upstream change shows up as a diff in
+# charts/posthog/upstream.yaml and, when a new pattern appears, as a hard generator error.
+
+upstream:
+  repo: PostHog/posthog
+  compose:
+    - docker-compose.base.yml
+    - docker-compose.hobby.yml
+  env_file: .env.services
+  # Files copied verbatim into charts/posthog/files/upstream/ (mounted as ConfigMaps).
+  files:
+    - docker/clickhouse/config.xml
+    - docker/clickhouse/config.d/default.xml
+    - docker/clickhouse/users.xml
+    - docker/clickhouse/user_defined_function.xml
+    - docker/clickhouse/docker-entrypoint-initdb.d/init-db.sh
+    - docker/clickhouse/docker-entrypoint-initdb.d/autoresearch-row-policies.sql
+    - docker/kafka/topics.txt
+    - docker/temporal/dynamicconfig/development-sql.yaml
+    - docker/livestream/configs-hobby.yml
+  # Whole directories copied verbatim (bundled PostgreSQL init scripts, ClickHouse init).
+  dirs:
+    - docker/postgres-init-scripts
+  # Directories that are too large for ConfigMaps; the chart copies them out of the
+  # posthog/posthog image with an init container instead (they ship inside the image).
+  image_dirs:
+    - posthog/idl
+    - posthog/user_scripts
+    - share
+
+# Compose services that the chart does not render, with the reason (goes into upstream.yaml).
+excluded:
+  db: bundled PostgreSQL is rendered from the chart's own template (or an external database is used)
+  proxy: replaced by the chart's router (Caddy) which has an ingest listener and an app listener
+  objectstorage: legacy MinIO used only by the hobby storage migration; S3-compatible storage is configured instead
+  seaweedfs: replaced by S3-compatible object storage (external or bundled SeaweedFS from the chart's own template)
+  elasticsearch: Temporal runs with PostgreSQL visibility (ENABLE_ES=false in hobby), so no Elasticsearch
+  temporal-admin-tools: interactive debugging container, not a workload
+  temporal-ui: optional UI, not part of the chart
+
+# Services rendered as StatefulSets with a volume claim.
+stateful:
+  clickhouse: {mountPath: /var/lib/clickhouse, size: 100Gi}
+  zookeeper: {mountPath: /data, size: 5Gi, extra: [{name: datalog, mountPath: /datalog, size: 5Gi}]}
+  kafka: {mountPath: /var/lib/redpanda/data, size: 50Gi}
+  redis7: {mountPath: /data, size: 2Gi}
+
+# Services rendered as Jobs (hooks) instead of long-running workloads.
+jobs:
+  kafka-init: {hook: 'post-install,post-upgrade', weight: -5}
+  asyncmigrationscheck: {hook: 'post-install,post-upgrade', weight: 5}
+
+# The container port each service listens on (compose rarely declares them). `metrics` is the
+# Prometheus port where a service exposes one.
+ports:
+  web: {http: 8000}
+  plugins: {http: 6738}
+  recording-api: {http: 6738}
+  livestream: {http: 8080}
+  capture: {http: 3000}
+  replay-capture: {http: 3000}
+  capture-logs: {http: 4318}
+  feature-flags: {http: 3001}
+  hypercache-server: {http: 3002}
+  cymbal: {http: 3302}
+  cymbal-resolution: {grpc: 50061}
+  personhog-replica: {grpc: 50051, metrics: 9100}
+  personhog-router: {grpc: 50052, metrics: 9101}
+  temporal: {grpc: 7233}
+  clickhouse: {http: 8123, native: 9000, interserver: 9009}
+  zookeeper: {client: 2181}
+  kafka: {kafka: 9092, admin: 9644, pandaproxy: 8082, schema: 8081, rpc: 33145}
+  redis7: {redis: 6379}
+  valkey: {redis: 6379}
+  browserless: {http: 3000}
+  # Consumers without a listener (Kafka workers): no Service is rendered.
+  worker: {}
+  temporal-django-worker: {}
+  ingestion-general: {http: 6738}
+  ingestion-sessionreplay: {http: 6738}
+  ingestion-error-tracking: {http: 6738}
+  ingestion-logs: {http: 6738}
+  ingestion-traces: {http: 6738}
+  property-defs-rs: {}
+
+# Readiness probes. Anything not listed gets a TCP probe on its first port (or none without ports).
+probes:
+  web: {httpGet: {path: /_readyz, port: http}}
+  capture: {httpGet: {path: /_readiness, port: http}}
+  replay-capture: {httpGet: {path: /_readiness, port: http}}
+  feature-flags: {httpGet: {path: /_readiness, port: http}}
+  hypercache-server: {httpGet: {path: /_readiness, port: http}}
+  plugins: {httpGet: {path: /_ready, port: http}}
+  ingestion-general: {httpGet: {path: /_ready, port: http}}
+  ingestion-sessionreplay: {httpGet: {path: /_ready, port: http}}
+  ingestion-error-tracking: {httpGet: {path: /_ready, port: http}}
+  ingestion-logs: {httpGet: {path: /_ready, port: http}}
+  ingestion-traces: {httpGet: {path: /_ready, port: http}}
+  recording-api: {httpGet: {path: /_ready, port: http}}
+  clickhouse: {httpGet: {path: /ping, port: http}}
+  kafka: {httpGet: {path: /v1/status/ready, port: admin}}
+  redis7: {exec: {command: [redis-cli, ping]}}
+  valkey: {exec: {command: [valkey-cli, ping]}}
+  temporal: {tcpSocket: {port: grpc}}
+  browserless: {httpGet: {path: /pressure, port: http}}
+
+# Command overrides. Hobby wires `web` and `temporal-django-worker` through host-mounted
+# wrapper scripts (compose/start = wait + migrate + docker-server); in Kubernetes the
+# migration is a Job and the containers run the underlying binaries directly.
+commands:
+  web: ["./bin/docker-server"]
+  temporal-django-worker: ["./bin/temporal-django-worker"]
+
+# Default resource requests/limits per service (values.yaml can override every one of them).
+resources:
+  default: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 1Gi}}
+  web: {requests: {cpu: 250m, memory: 1Gi}, limits: {memory: 2Gi}}
+  worker: {requests: {cpu: 100m, memory: 768Mi}, limits: {memory: 2Gi}}
+  temporal-django-worker: {requests: {cpu: 100m, memory: 768Mi}, limits: {memory: 2Gi}}
+  plugins: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1536Mi}}
+  ingestion-general: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1536Mi}}
+  ingestion-sessionreplay: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1536Mi}}
+  clickhouse: {requests: {cpu: 1, memory: 4Gi}, limits: {memory: 8Gi}}
+  kafka: {requests: {cpu: 250m, memory: 1536Mi}, limits: {memory: 4Gi}}
+  zookeeper: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 768Mi}}
+  temporal: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1Gi}}
+  browserless: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 2Gi}}
+  cymbal: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 1Gi}}
+
+# Pod security: which user each image runs as. `root` marks images that need uid 0
+# (documented in the chart README); everything else runs non-root with all capabilities dropped.
+run_as:
+  # posthog/posthog and posthog/posthog-node ship user `posthog` = uid 10001.
+  default: {runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
+  capture: {runAsUser: 65534, runAsGroup: 65534}
+  replay-capture: {runAsUser: 65534, runAsGroup: 65534}
+  capture-logs: {runAsUser: 65534, runAsGroup: 65534}
+  feature-flags: {runAsUser: 65534, runAsGroup: 65534}
+  property-defs-rs: {runAsUser: 65534, runAsGroup: 65534}
+  hypercache-server: {runAsUser: 65534, runAsGroup: 65534}
+  personhog-replica: {runAsUser: 65534, runAsGroup: 65534}
+  personhog-router: {runAsUser: 65534, runAsGroup: 65534}
+  cymbal: {runAsUser: 65534, runAsGroup: 65534}
+  cymbal-resolution: {runAsUser: 65534, runAsGroup: 65534}
+  clickhouse: {runAsUser: 101, runAsGroup: 101, fsGroup: 101}
+  kafka: {runAsUser: 101, runAsGroup: 101, fsGroup: 101}
+  redis7: {runAsUser: 999, runAsGroup: 999, fsGroup: 999}
+  valkey: {runAsUser: 999, runAsGroup: 999, fsGroup: 999}
+  browserless: {runAsUser: 999, runAsGroup: 999}
+  temporal: {runAsUser: 1000, runAsGroup: 1000}
+  livestream: {runAsUser: 65534, runAsGroup: 65534}
+
+# Hostnames used inside compose and what they become in the chart. `helper` renders through the
+# chart's `posthog.host` helper, which returns the external host when one is configured.
+hosts:
+  db: {helper: postgresql}
+  redis7: {helper: redis}
+  valkey: {helper: valkey}
+  kafka: {helper: kafka}
+  clickhouse: {helper: clickhouse}
+  temporal: {helper: temporal}
+  web: {service: web}
+  plugins: {service: plugins}
+  recording-api: {service: recording-api}
+  feature-flags: {service: feature-flags}
+  hypercache-server: {service: hypercache-server}
+  livestream: {service: livestream}
+  personhog-router: {service: personhog-router}
+  personhog-replica: {service: personhog-replica}
+  cymbal: {service: cymbal}
+  cymbal-resolution: {service: cymbal-resolution}
+  browserless: {service: browserless}
+  capture: {service: capture}
+  capture-ai: {service: capture-ai}
+  replay-capture: {service: replay-capture}
+  capture-logs: {service: capture-logs}
+  # Storage endpoints are replaced as whole values (see env_values), never host-by-host.
+  seaweedfs: {storage: true}
+  objectstorage: {storage: true}
+  elasticsearch: {drop: true}
+
+# Compose variables (${VAR:-default} / $VAR) and their chart meaning.
+variables:
+  DOMAIN: {tpl: '{{ include "posthog.siteHost" $ }}'}
+  POSTHOG_SECRET: {secret: SECRET_KEY}
+  ENCRYPTION_SALT_KEYS: {secret: ENCRYPTION_SALT_KEYS}
+  BROWSERLESS_SECRET: {secret: BROWSERLESS_TOKEN}
+  INTERNAL_API_SECRET: {secret: INTERNAL_API_SECRET}
+  REGISTRY_URL: {image: posthog}
+  POSTHOG_APP_TAG: {image: posthog}
+  POSTHOG_NODE_TAG: {image: posthog-node}
+  DOCKER_REGISTRY_PREFIX: {literal: ''}
+  CLICKHOUSE_SERVER_IMAGE: {image: clickhouse}
+  ANTHROPIC_API_KEY: {secret: ANTHROPIC_API_KEY, optional: true}
+  OPENAI_API_KEY: {secret: OPENAI_API_KEY, optional: true}
+  OPT_OUT_CAPTURE: {tpl: '{{ .Values.posthog.optOutCapture | toString }}'}
+  CSP_REPORT_ENDPOINT: {tpl: '{{ .Values.posthog.cspReportEndpoint }}'}
+  TLS_BLOCK: {literal: ''}
+  SEAWEEDFS_DOCKER_NAME: {literal: ''}
+
+# Whole env values that are replaced regardless of which service carries them.
+# Matched by env name; `secret` = key in the chart's connections secret, `tpl` = template.
+env_values:
+  # PostgreSQL connection strings: user:password live in a Secret, never in the pod spec.
+  DATABASE_URL: {secret: DATABASE_URL}
+  PERSONS_DATABASE_URL: {secret: DATABASE_URL}
+  PRIMARY_DATABASE_URL: {secret: DATABASE_URL}
+  BEHAVIORAL_COHORTS_DATABASE_URL: {secret: DATABASE_URL}
+  PERSONS_DB_WRITER_URL: {secret: DATABASE_URL}
+  PERSONS_DB_READER_URL: {secret: DATABASE_URL}
+  PERSONS_URL: {secret: DATABASE_URL}
+  WRITE_DATABASE_URL: {secret: DATABASE_URL}
+  READ_DATABASE_URL: {secret: DATABASE_URL}
+  PERSONS_WRITE_DATABASE_URL: {secret: DATABASE_URL}
+  PERSONS_READ_DATABASE_URL: {secret: DATABASE_URL}
+  PGHOST: {tpl: '{{ include "posthog.host" (list $ "postgresql") }}'}
+  PGUSER: {secret: PGUSER}
+  PGPASSWORD: {secret: PGPASSWORD}
+  POSTGRES_USER: {secret: PGUSER}
+  POSTGRES_PWD: {secret: PGPASSWORD}
+  POSTGRES_SEEDS: {tpl: '{{ include "posthog.host" (list $ "postgresql") }}'}
+  # ClickHouse application users (passwords come from the clickhouse secret).
+  CLICKHOUSE_API_PASSWORD: {secret: CLICKHOUSE_API_PASSWORD}
+  CLICKHOUSE_APP_PASSWORD: {secret: CLICKHOUSE_APP_PASSWORD}
+  CLICKHOUSE_BILLING_PASSWORD: {secret: CLICKHOUSE_BILLING_PASSWORD}
+  CLICKHOUSE_DICT_READER_PASSWORD: {secret: CLICKHOUSE_DICT_READER_PASSWORD}
+  # Object storage (general bucket: exports, symbol sets, AI blobs).
+  OBJECT_STORAGE_ENDPOINT: {tpl: '{{ include "posthog.objectStorageEndpoint" $ }}'}
+  OBJECT_STORAGE_PUBLIC_ENDPOINT: {tpl: '{{ include "posthog.publicUrl" $ }}'}
+  OBJECT_STORAGE_ACCESS_KEY_ID: {secret: OBJECT_STORAGE_ACCESS_KEY_ID}
+  OBJECT_STORAGE_SECRET_ACCESS_KEY: {secret: OBJECT_STORAGE_SECRET_ACCESS_KEY}
+  OBJECT_STORAGE_BUCKET: {tpl: '{{ .Values.objectStorage.bucket }}'}
+  OBJECT_STORAGE_REGION: {tpl: '{{ .Values.objectStorage.region }}'}
+  OBJECT_STORAGE_FORCE_PATH_STYLE: {tpl: '{{ .Values.objectStorage.forcePathStyle | toString }}'}
+  AI_BLOB_S3_ENDPOINT: {tpl: '{{ include "posthog.objectStorageEndpoint" $ }}'}
+  AI_BLOB_S3_BUCKET: {tpl: '{{ .Values.objectStorage.bucket }}'}
+  AI_BLOB_S3_REGION: {tpl: '{{ .Values.objectStorage.region }}'}
+  AI_BLOB_S3_ACCESS_KEY_ID: {secret: OBJECT_STORAGE_ACCESS_KEY_ID}
+  AI_BLOB_S3_SECRET_ACCESS_KEY: {secret: OBJECT_STORAGE_SECRET_ACCESS_KEY}
+  # Session replay blob storage (may be a separate bucket).
+  SESSION_RECORDING_V2_S3_ENDPOINT: {tpl: '{{ .Values.sessionReplay.storage.endpoint | default (include "posthog.objectStorageEndpoint" $) }}'}
+  SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: {secret: SESSION_RECORDING_ACCESS_KEY_ID}
+  SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: {secret: SESSION_RECORDING_SECRET_ACCESS_KEY}
+  # Livestream / capture-logs secrets that upstream leaves as placeholders or reuses SECRET_KEY for.
+  LIVESTREAM_JWT_SECRET: {secret: SECRET_KEY}
+  JWT_SECRET: {secret: SECRET_KEY}
+  # Web/worker literals that depend on the deployment URL(s).
+  SITE_URL: {tpl: '{{ .Values.posthog.siteUrl }}'}
+  LIVESTREAM_HOST: {tpl: '{{ include "posthog.publicUrl" $ }}/livestream'}
+  # Upstream's hobby placeholder for the salt; every service gets the real one.
+  # (Handled by `variables` above where it is `$ENCRYPTION_SALT_KEYS`; literal fallbacks below.)
+
+# Literal env values that are wrong outside compose and must be replaced.
+env_literals:
+  ENCRYPTION_SALT_KEYS:
+    '00beef0000beef0000beef0000beef00': {secret: ENCRYPTION_SALT_KEYS}
+  JWT_SECRET:
+    '<randomly generated secret key>': {secret: SECRET_KEY}
+
+# Env removed from upstream services (features the chart does not ship).
+env_drop:
+  temporal: [ES_SEEDS, ES_VERSION]
+
+# Env added next to an existing env var (companions): when a service carries the trigger
+# variable, the listed variables are added unless upstream already sets them.
+env_companions:
+  SESSION_RECORDING_V2_S3_ENDPOINT:
+    - {name: SESSION_RECORDING_V2_S3_BUCKET, value: '{{ .Values.sessionReplay.storage.bucket | default .Values.objectStorage.bucket }}', tpl: true}
+    - {name: SESSION_RECORDING_V2_S3_REGION, value: '{{ .Values.sessionReplay.storage.region | default .Values.objectStorage.region }}', tpl: true}
+  OBJECT_STORAGE_ENDPOINT:
+    - {name: OBJECT_STORAGE_BUCKET, value: '{{ .Values.objectStorage.bucket }}', tpl: true}
+    - {name: OBJECT_STORAGE_REGION, value: '{{ .Values.objectStorage.region }}', tpl: true}
+    - {name: OBJECT_STORAGE_FORCE_PATH_STYLE, value: '{{ .Values.objectStorage.forcePathStyle | toString }}', tpl: true}
+  CLICKHOUSE_HOST:
+    - {name: CLICKHOUSE_USER, value: 'default'}
+    - {name: CLICKHOUSE_PASSWORD, value: ''}
+
+# Env added on top of upstream (things compose gets from host mounts or defaults that differ in K8s).
+env_extra:
+  web:
+    - {name: IS_BEHIND_PROXY, value: 'true'}
+    - {name: TRUST_ALL_PROXIES, value: 'true'}
+    - {name: DISABLE_SECURE_SSL_REDIRECT, value: 'true'}
+    - {name: SECURE_COOKIES, value: '{{ .Values.posthog.secureCookies | toString }}', tpl: true}
+    - {name: MULTI_ORG_ENABLED, value: '{{ .Values.posthog.multiOrg | toString }}', tpl: true}
+  temporal:
+    - {name: SKIP_DB_CREATE, value: '{{ .Values.temporal.skipDbCreate | toString }}', tpl: true}
+    - {name: DBNAME, value: '{{ .Values.temporal.database }}', tpl: true}
+    - {name: VISIBILITY_DBNAME, value: '{{ .Values.temporal.visibilityDatabase }}', tpl: true}
+  clickhouse:
+    - {name: CLICKHOUSE_DO_NOT_CHOWN, value: '1'}
+
+# Files/dirs mounted from the compose host and their chart source.
+mounts:
+  clickhouse:
+    - {path: /etc/clickhouse-server/config.xml, file: docker/clickhouse/config.xml}
+    - {path: /etc/clickhouse-server/config.d/default.xml, file: docker/clickhouse/config.d/default.xml}
+    - {path: /etc/clickhouse-server/users.xml, file: docker/clickhouse/users.xml}
+    - {path: /etc/clickhouse-server/user_defined_function.xml, file: docker/clickhouse/user_defined_function.xml}
+    - {path: /docker-entrypoint-initdb.d, dir: docker/clickhouse/docker-entrypoint-initdb.d}
+    - {path: /idl, imageDir: posthog/idl}
+    - {path: /var/lib/clickhouse/user_scripts, imageDir: posthog/user_scripts}
+  kafka-init:
+    - {path: /topics.txt, file: docker/kafka/topics.txt, subPath: true}
+  temporal:
+    - {path: /etc/temporal/config/dynamicconfig, dir: docker/temporal/dynamicconfig}
+  livestream:
+    - {path: /configs/configs.yml, file: docker/livestream/configs-hobby.yml, subPath: true}
+  # GeoIP database: ships inside the posthog/posthog image (/code/share/GeoLite2-City.mmdb) and is
+  # copied into the pods that need it by the same init container that copies the ClickHouse assets.
+  plugins:
+    - {path: /share, imageDir: share}
+  feature-flags:
+    - {path: /share, imageDir: share}
+  cymbal:
+    - {path: /share, imageDir: share}

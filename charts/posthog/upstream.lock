@@ -1,0 +1,25 @@
+ref: 18b824b7932ad13f25602b4ea0376fc568ac4b22
+inputs:
+  .env.services: f4464e2c98a5691675176a5071d9db971fde8e39a665bee3b9cb489190b95d6d
+  docker-compose.base.yml: e69fdce7b7173579dd4c0902f621630f0c3e7ffac91f6828e3b753c3fcff51ac
+  docker-compose.hobby.yml: a4544d94786d035fbe8da3d56524a81e301b3214c5512d6d81d295a5c04d5581
+  docker/clickhouse/config.d/default.xml: 729f9bdf0c5e490d211f51c27195b75813a68ab5a1ff0aa8e047a0550a714844
+  docker/clickhouse/config.xml: baa3a3ebc6ecd6ebdf6f3db5da5e348c33d22308bd394eadaabc33b336ff37bc
+  docker/clickhouse/docker-entrypoint-initdb.d/autoresearch-row-policies.sql: c7ecc4d8a5b1868af4ba685dc665472a9c2d3a701a65de356e9f21d55bc4d9e4
+  docker/clickhouse/docker-entrypoint-initdb.d/init-db.sh: 86cc5bffdaf0673d50059c7fe99f1277d1d284fbc77845aef8cb14c963c61f5e
+  docker/clickhouse/user_defined_function.xml: 1a6b7764ce001d20e7ce3a02fc78bd707ca81d3670dee5389ef53cce379e2bc4
+  docker/clickhouse/users.xml: efa82678d8ec9597ba02cf42d2b8efa7c1c1e1c6b336eaa95fd0a808b5af8b03
+  docker/kafka/topics.txt: 465193e20c7a34e22809cd4f57d78bc4f27a990419af00747535855fac3cc600
+  docker/livestream/configs-hobby.yml: bf867c5214cb266b72546cdf6c358b31efcae51ca2d5bd230c95944ee8f02d3c
+  docker/postgres-init-scripts/create-agent-runtime-queue-db.sh: 549783748eb51f1ecd105520a8b2fa1ec0db4494c15efd499f55636e0f159b6f
+  docker/postgres-init-scripts/create-behavioral-cohorts-db.sh: 96cc767813f0286f751c4392776b7e54ee2b3b743749cabfa3f4afe7e0ae4696
+  docker/postgres-init-scripts/create-cyclotron-db.sh: bf693e406c121136ae1f10d0a1148949666af0d0802ef0383806ba5d71ef2bfa
+  docker/postgres-init-scripts/create-cyclotron-node-db.sh: 021e86eacd27c59bfa119b4cca95b84a256468cd77251ef9e13199639eddf46e
+  docker/postgres-init-scripts/create-dagster-test-db.sh: 5becc52c0e84133ac2bc97ec29ff4f2dc2a8f3bf4c43ac1854f2c7d479f97770
+  docker/postgres-init-scripts/create-ducklake-catalog.sh: 9e1d7561f0c828fbe47edc75d5130a4eac099bbd47eae1099895caadd3c4b060
+  docker/postgres-init-scripts/create-flags-read-store-db.sh: 751a7cd68489b0be1996bb1cf589a78066768096aee5ec90911ef8f72e25229b
+  docker/postgres-init-scripts/create-persons-db.sh: 27d97de943ed6c6ac20b7b47c115f1e95d99d99174890d178a9470d3b88c3832
+  docker/postgres-init-scripts/create-product-dbs.sh: aa3338c4d40247d239be470fb4b3121ead2ac0e4526d830fa262029141d9a78a
+  docker/temporal/dynamicconfig/README.md: 2847e8b6011bf1e0407d2a66a84144f5e91c985e19d217b3c08f6dfc0ebdb989
+  docker/temporal/dynamicconfig/development-sql.yaml: da056d0131baa6f81d9521508aae9f34e6dfc29419aacf6b87a7d89c0919fc65
+  docker/temporal/dynamicconfig/docker.yaml: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

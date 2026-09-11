@@ -1,0 +1,12 @@
+[project]
+name = "posthog-k8s-tools"
+version = "0.1.0"
+description = "Generator that turns PostHog's hobby docker-compose into chart data"
+requires-python = ">=3.12"
+dependencies = ["pyyaml>=6.0.2,<7"]
+
+[dependency-groups]
+dev = ["pytest>=8.3,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "labels": ["dependencies"],
+  "github-actions": {"enabled": true},
+  "helm-values": {"enabled": true},
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Pin of the upstream PostHog commit the chart is generated from",
+      "fileMatch": ["^charts/posthog/upstream\\.lock$"],
+      "matchStrings": ["ref: (?<currentDigest>[0-9a-f]{40})"],
+      "depNameTemplate": "PostHog/posthog",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "master"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDepNames": ["PostHog/posthog"],
+      "groupName": "upstream PostHog",
+      "schedule": ["before 6am on monday"],
+      "commitMessageTopic": "upstream PostHog",
+      "postUpgradeTasks": {
+        "commands": ["make sync UPSTREAM={{{newDigest}}}"],
+        "fileFilters": ["charts/posthog/**"],
+        "executionMode": "branch"
+      }
+    }
+  ]
+}

@@ -69,7 +69,7 @@ usage: include "posthog.host" (list $ "postgresql")
 {{- end -}}
 
 {{- define "posthog.siteHost" -}}
-{{- regexReplaceAll "^https?://" .Values.posthog.siteUrl "" | regexReplaceAll "/.*$" "" -}}
+{{- regexReplaceAll "/.*$" (regexReplaceAll "^https?://" .Values.posthog.siteUrl "") "" -}}
 {{- end -}}
 
 {{- define "posthog.publicUrl" -}}
@@ -86,7 +86,7 @@ usage: include "posthog.host" (list $ "postgresql")
 {{- end -}}
 
 {{- define "posthog.publicHost" -}}
-{{- regexReplaceAll "^https?://" (include "posthog.publicUrl" .) "" | regexReplaceAll "/.*$" "" -}}
+{{- regexReplaceAll "/.*$" (regexReplaceAll "^https?://" (include "posthog.publicUrl" .) "") "" -}}
 {{- end -}}
 
 {{/*

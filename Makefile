@@ -34,9 +34,8 @@ kubeconform: ## Validate rendered manifests against the Kubernetes schemas
 docs: ## Regenerate charts/posthog/README.md values table
 	helm-docs --chart-search-root $(CHART) --template-files README.md.gotmpl
 
-e2e-install: ## Install into the current kube context (kind in CI)
-	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/ci/kind-values.yaml --wait --timeout 30m
+e2e-install: ## Install into the current kube context (kind in CI), printing pod status while waiting
+	NAMESPACE=$(NAMESPACE) RELEASE=$(RELEASE) CHART=$(CHART) e2e/install.sh
 
 e2e-test: ## Smoke tests against the installed release
 	python3 e2e/smoke.py --namespace $(NAMESPACE) --release $(RELEASE)

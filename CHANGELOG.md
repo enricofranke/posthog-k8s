@@ -18,4 +18,10 @@ chart data was generated from.
 - Secrets by reference (`existingSecret`, `secrets.keys`), generated once when absent.
 - Images pinned by digest at sync time.
 - `migrate`, `kafka-init` and `asyncmigrationscheck` as Helm/Argo hooks.
-- CI: generator tests, helm lint/unittest, kubeconform, end-to-end install and smoke test on kind.
+- CI: generator tests, helm lint/unittest, kubeconform, Caddyfile validation, end-to-end install
+  and smoke test on kind.
+- Schema seed (`seed.hostPath` / `seed.existingClaim`): restore a pre-migrated PostgreSQL dump and
+  ClickHouse backup on first start instead of running every migration; CI caches one per upstream
+  commit.
+- Compose-name aliases (`compatAliases.enabled`): ExternalName Services for `db`, `kafka`,
+  `clickhouse`, `temporal`, ... because PostHog's code uses those names as defaults.

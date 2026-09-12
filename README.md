@@ -156,6 +156,25 @@ license and this chart does not enable it), automatic upstream bumps without a h
 PostHog says the hobby deployment is meant for "a couple hundred thousand events a month". People
 run it well beyond that; watch ClickHouse memory and Kafka lag and scale the node.
 
+## Fast first start (schema seed)
+
+A fresh PostHog database needs roughly 1,500 PostgreSQL and 300 ClickHouse migrations. On a small
+cluster that is 10–20 minutes during which `web` is not ready. The chart can restore a **schema
+seed** instead: a `pg_dump` plus a native ClickHouse `BACKUP` of an already-migrated, empty
+instance. The bundled datastores pick it up on their first start and the `migrate` job only has
+to confirm that everything is applied.
+
+```yaml
+seed:
+  hostPath: /var/lib/posthog-seed     # directory on the node with posthog.pgdump + clickhouse/seed/
+  # or: existingClaim: posthog-seed   # a PVC with the same layout
+```
+
+Seeds are produced with `e2e/export-seed.sh` from a running release and will be attached to
+chart releases. Later upgrades migrate incrementally anyway; the seed only matters for the first
+start. CI uses the same mechanism (cached per upstream commit), which is why a warm run takes
+about a third of a cold one.
+
 ## Upgrading
 
 ```bash

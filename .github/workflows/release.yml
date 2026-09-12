@@ -34,8 +34,26 @@ jobs:
           echo "digest=$(echo "$out" | awk '/Digest:/ {print $2}')" >> "$GITHUB_OUTPUT"
       - name: Sign chart (keyless)
         run: cosign sign --yes ghcr.io/${{ github.repository_owner }}/charts/posthog@${{ steps.push.outputs.digest }}
+      - name: Restore the schema seed CI produced for this upstream commit
+        id: seed
+        uses: actions/cache/restore@v4
+        with:
+          path: .seed
+          key: schema-seed-${{ hashFiles('charts/posthog/upstream.lock', 'charts/posthog/files/chart/**') }}
+      - name: Package the schema seed
+        if: steps.seed.outputs.cache-hit == 'true'
+        run: |
+          v=$(grep '^version:' charts/posthog/Chart.yaml | awk '{print $2}')
+          tar -C .seed -czf "dist/posthog-schema-seed-$v.tar.gz" .
+          ls -la dist
       - name: GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.tgz
+          files: dist/*
           generate_release_notes: true
+          body: |
+            Chart `oci://ghcr.io/${{ github.repository_owner }}/charts/posthog` version `${{ github.ref_name }}`, signed with cosign (keyless).
+
+            `posthog-schema-seed-*.tar.gz` is a pre-migrated empty schema (PostgreSQL dump + ClickHouse
+            backup) for a fast first start: unpack it on a node or into a PVC and set `seed.hostPath` /
+            `seed.existingClaim`. See README "Fast first start".

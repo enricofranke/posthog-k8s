@@ -170,10 +170,10 @@ seed:
   # or: existingClaim: posthog-seed   # a PVC with the same layout
 ```
 
-Seeds are produced with `e2e/export-seed.sh` from a running release and will be attached to
-chart releases. Later upgrades migrate incrementally anyway; the seed only matters for the first
-start. CI uses the same mechanism (cached per upstream commit), which is why a warm run takes
-about a third of a cold one.
+Seeds are produced with `e2e/export-seed.sh` from a running release and are attached to chart
+releases as `posthog-schema-seed-<version>.tar.gz`. Later upgrades migrate incrementally anyway; the seed only matters for the first
+start. CI uses the same mechanism (cached per upstream commit): a cold end-to-end run installs in
+~27 minutes on a 4 vCPU runner, a seeded one in ~10.
 
 ## Upgrading
 

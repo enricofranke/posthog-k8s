@@ -10,6 +10,10 @@ on every change.
 ![Chart](https://img.shields.io/badge/chart-0.1.0-informational)
 ![Upstream](https://img.shields.io/badge/PostHog-18b824b7-informational)
 
+> **Status: alpha (0.1.x).** Installs and passes an end-to-end test on every commit; running in
+> production by the maintainers with external PostgreSQL and S3. Expect values to change before 1.0.
+> Not tested yet: in-place upgrades between chart versions, Gateway API ingress.
+
 > Not affiliated with or endorsed by PostHog Inc. PostHog stopped supporting Kubernetes in 2023
 > and archived its Helm chart in May 2026. This project exists because a lot of us still want to
 > run PostHog next to our other workloads, with GitOps, our own Postgres and our own S3.
@@ -58,7 +62,7 @@ helm install posthog oci://ghcr.io/enricofranke/charts/posthog \
 First start takes a few minutes: ClickHouse and Redpanda come up, the `migrate` job applies the
 schema, then `web` becomes ready. Open the site URL and create the first user.
 
-Until the first release is published, install from a clone:
+Or from a clone:
 
 ```bash
 git clone https://github.com/enricofranke/posthog-k8s && cd posthog-k8s

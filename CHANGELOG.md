@@ -4,7 +4,9 @@ All notable changes to the chart. The format follows [Keep a Changelog](https://
 versions follow [SemVer](https://semver.org/). `appVersion` is the upstream PostHog commit the
 chart data was generated from.
 
-## [Unreleased]
+## [0.1.0] - 2026-09-12
+
+First alpha release.
 
 ### Added
 - First public version of the chart, generated from PostHog `18b824b7` (2026-09-11).

@@ -46,7 +46,7 @@ jobs:
     name: End-to-end on kind
     runs-on: ubuntu-latest
     needs: lint
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4

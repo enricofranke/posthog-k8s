@@ -153,7 +153,9 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
-            capabilities: {drop: [ALL]}
+            # The caddy image carries cap_net_bind_service as a file capability with the
+            # effective bit; exec fails with EPERM unless the capability is permitted.
+            capabilities: {drop: [ALL], add: [NET_BIND_SERVICE]}
           volumeMounts:
             - name: config
               mountPath: /etc/caddy

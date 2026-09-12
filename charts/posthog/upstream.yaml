@@ -1769,9 +1769,9 @@ services:
     readinessProbe:
       exec:
         command:
-        - sh
+        - bash
         - -c
-        - echo ruok | (exec 3<>/dev/tcp/127.0.0.1/2181; cat >&3; timeout 3 cat <&3) | grep -q imok
+        - exec 3<>/dev/tcp/127.0.0.1/2181; echo ruok >&3; timeout 3 cat <&3 | grep -q imok
     resources:
       requests:
         cpu: 50m

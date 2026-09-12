@@ -109,7 +109,7 @@ probes:
   redis7: {exec: {command: [redis-cli, ping]}}
   valkey: {exec: {command: [valkey-cli, ping]}}
   temporal: {tcpSocket: {port: grpc}}
-  zookeeper: {exec: {command: [sh, -c, 'echo ruok | (exec 3<>/dev/tcp/127.0.0.1/2181; cat >&3; timeout 3 cat <&3) | grep -q imok']}}
+  zookeeper: {exec: {command: [bash, -c, 'exec 3<>/dev/tcp/127.0.0.1/2181; echo ruok >&3; timeout 3 cat <&3 | grep -q imok']}}
   browserless: {httpGet: {path: /pressure, port: http}}
 
 # Command overrides. Hobby wires `web` and `temporal-django-worker` through host-mounted

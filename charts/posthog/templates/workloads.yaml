@@ -142,12 +142,12 @@ spec:
             {{- range $mounts }}
             {{- $f := ternary (printf "chart/%s" (.chartFile | default "")) (.file | default "") (hasKey . "chartFile") }}
             {{- if $f }}
-            - name: cfg-{{ dir $f | replace "/" "-" | replace "_" "-" | trunc 40 }}
+            - name: cfg-{{ dir $f | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40 }}
               mountPath: {{ .path }}
               subPath: {{ base $f }}
               readOnly: true
             {{- else if .dir }}
-            - name: cfg-{{ .dir | replace "/" "-" | replace "_" "-" | trunc 40 }}
+            - name: cfg-{{ .dir | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40 }}
               mountPath: {{ .path }}
               readOnly: true
             {{- else if .imageDir }}
@@ -191,7 +191,7 @@ spec:
           volumeMounts:
             {{- range $side.mounts }}
             {{- if .file }}
-            - name: cfg-{{ dir .file | replace "/" "-" | replace "_" "-" | trunc 40 }}
+            - name: cfg-{{ dir .file | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40 }}
               mountPath: {{ .path }}
               subPath: {{ base .file }}
               readOnly: true
@@ -207,14 +207,14 @@ spec:
         {{- $f := ternary (printf "chart/%s" (.chartFile | default "")) (.file | default "") (hasKey . "chartFile") }}
         {{- if $f }}
         {{- $cm := include "posthog.configMapName" (list $root (dir $f)) }}
-        {{- $vn := printf "cfg-%s" (dir $f | replace "/" "-" | replace "_" "-" | trunc 40) }}
+        {{- $vn := printf "cfg-%s" (dir $f | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40) }}
         {{- if not (hasKey $seen $vn) }}{{- $_ := set $seen $vn true }}
         - name: {{ $vn }}
           configMap:
             name: {{ $cm }}
         {{- end }}
         {{- else if .dir }}
-        {{- $vn := printf "cfg-%s" (.dir | replace "/" "-" | replace "_" "-" | trunc 40) }}
+        {{- $vn := printf "cfg-%s" (.dir | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40) }}
         {{- if not (hasKey $seen $vn) }}{{- $_ := set $seen $vn true }}
         - name: {{ $vn }}
           configMap:
@@ -230,7 +230,7 @@ spec:
         {{- if and (eq $side.kind "sidecar") (eq $side.sidecarOf $name) }}
         {{- range $side.mounts }}
         {{- if .file }}
-        {{- $vn := printf "cfg-%s" (dir .file | replace "/" "-" | replace "_" "-" | trunc 40) }}
+        {{- $vn := printf "cfg-%s" (dir .file | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40) }}
         {{- if not (hasKey $seen $vn) }}{{- $_ := set $seen $vn true }}
         - name: {{ $vn }}
           configMap:

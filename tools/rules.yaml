@@ -109,6 +109,7 @@ probes:
   redis7: {exec: {command: [redis-cli, ping]}}
   valkey: {exec: {command: [valkey-cli, ping]}}
   temporal: {tcpSocket: {port: grpc}}
+  zookeeper: {exec: {command: [sh, -c, 'echo ruok | (exec 3<>/dev/tcp/127.0.0.1/2181; cat >&3; timeout 3 cat <&3) | grep -q imok']}}
   browserless: {httpGet: {path: /pressure, port: http}}
 
 # Command overrides. Hobby wires `web` and `temporal-django-worker` through host-mounted
@@ -313,6 +314,9 @@ mounts:
     - {path: /etc/temporal/config/dynamicconfig, dir: docker/temporal/dynamicconfig}
   livestream:
     - {path: /configs/configs.yml, file: docker/livestream/configs-hobby.yml, subPath: true}
+  # Chart-owned file (files/chart/...): the image writes zoo.cfg itself only when running as root.
+  zookeeper:
+    - {path: /conf/zoo.cfg, chartFile: zookeeper/zoo.cfg, subPath: true}
   # GeoIP database: ships inside the posthog/posthog image (/code/share/GeoLite2-City.mmdb) and is
   # copied into the pods that need it by the same init container that copies the ClickHouse assets.
   plugins:

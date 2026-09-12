@@ -507,7 +507,7 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
         entry["dependsOn"] = sorted(deps if isinstance(deps, list) else list(deps))
         for vol in svc.get("volumes") or []:
             src = str(vol).split(":")[0]
-            if src.startswith("./") and name not in rules["mounts"] and "share" not in src and "compose" not in src:
+            if src.startswith("./") and name not in rules["mounts"] and "share" not in src and "compose" not in src:  # noqa: E501
                 rw.problems.append(f"{name}: host mount {vol} has no rule in mounts")
         out_services[name] = entry
 

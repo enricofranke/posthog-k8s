@@ -11,6 +11,8 @@ carry compose hostnames or dev passwords and are rewritten here:
 {{- $kafka := printf "%s:9092" (include "posthog.host" (list . "kafka")) -}}
 {{- if .Values.kafka.external.brokers }}{{ $kafka = .Values.kafka.external.brokers }}{{ end -}}
 {{- range $dir := include "posthog.configDirs" . | fromJsonArray }}
+{{- $base := ternary "files/chart" "files/upstream" (hasPrefix "chart/" $dir) }}
+{{- $rel := ternary (trimPrefix "chart/" $dir) $dir (hasPrefix "chart/" $dir) }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -21,7 +23,7 @@ metadata:
     {{- include "posthog.labels" $root | nindent 4 }}
     app.kubernetes.io/component: config
 data:
-{{- range $path, $_ := $root.Files.Glob (printf "files/upstream/%s/*" $dir) }}
+{{- range $path, $_ := $root.Files.Glob (printf "%s/%s/*" $base $rel) }}
 {{- $content := $root.Files.Get $path }}
 {{- $file := base $path }}
 {{- if eq $dir "docker/clickhouse" }}

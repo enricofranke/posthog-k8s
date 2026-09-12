@@ -58,6 +58,9 @@ data:
         request_body {
             max_size 64MB
         }
+        handle /_router/healthz {
+            respond "ok" 200
+        }
 {{ include "posthog.routerHandles" (list . $up.routes) | indent 4 }}
         handle {
             reverse_proxy {{ $web }}
@@ -73,6 +76,9 @@ data:
 {{- range $r.stripHeaders }}
             -{{ . }}
 {{- end }}
+        }
+        handle /_router/healthz {
+            respond "ok" 200
         }
 {{ include "posthog.routerHandles" (list . $up.routes) | indent 4 }}
         @web-public {
@@ -140,7 +146,7 @@ spec:
             - name: ingest
               containerPort: {{ $r.ports.ingest }}
           readinessProbe:
-            httpGet: {path: /_health, port: ingest}
+            httpGet: {path: /_router/healthz, port: ingest}
             periodSeconds: 10
           resources:
             {{- toYaml $r.resources | nindent 12 }}

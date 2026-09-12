@@ -199,6 +199,10 @@ usage: include "posthog.env" (list $ $svcName $envList)
 {{- $rel := trimPrefix "files/upstream/" $path -}}
 {{- $_ := set $dirs (dir $rel) true -}}
 {{- end -}}
+{{- range $path, $_ := .Files.Glob "files/chart/**" -}}
+{{- $rel := trimPrefix "files/" $path -}}
+{{- $_ := set $dirs (dir $rel) true -}}
+{{- end -}}
 {{- keys $dirs | sortAlpha | toJson -}}
 {{- end -}}
 
@@ -246,15 +250,15 @@ checksum/values: {{ toYaml $.Values.posthog | sha256sum | trunc 16 }}
     - |
 {{- range $mounts }}
 {{- if .imageDir }}
-      cp -r /code/{{ .imageDir }}/. /upstream/{{ .imageDir | replace "/" "-" }}/
+      cp -r /code/{{ .imageDir }}/. /upstream/{{ .imageDir | replace "/" "-" | replace "_" "-" }}/
 {{- end }}
 {{- end }}
       ls -la /upstream
   volumeMounts:
 {{- range $mounts }}
 {{- if .imageDir }}
-    - name: upstream-{{ .imageDir | replace "/" "-" }}
-      mountPath: /upstream/{{ .imageDir | replace "/" "-" }}
+    - name: upstream-{{ .imageDir | replace "/" "-" | replace "_" "-" }}
+      mountPath: /upstream/{{ .imageDir | replace "/" "-" | replace "_" "-" }}
 {{- end }}
 {{- end }}
   securityContext:

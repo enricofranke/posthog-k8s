@@ -72,11 +72,9 @@ data:
         request_body {
             max_size 64MB
         }
-        request_header {
 {{- range $r.stripHeaders }}
-            -{{ . }}
+        request_header -{{ . }}
 {{- end }}
-        }
         handle /_router/healthz {
             respond "ok" 200
         }

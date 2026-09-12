@@ -42,11 +42,16 @@ spec:
             - |
               /usr/bin/weed server -s3 -s3.port=8333 -master.port=9333 -dir=/data -volume.max=1000 -master.volumePreallocate=false -ip=127.0.0.1 -ip.bind=0.0.0.0 &
               WEED_PID=$!
-              until echo "s3.bucket.list" | /usr/bin/weed shell -master=127.0.0.1:9333 >/dev/null 2>&1; do sleep 2; done
-              {{- range $buckets }}
-              echo "s3.bucket.create -name {{ . }}" | /usr/bin/weed shell -master=127.0.0.1:9333 || true
-              {{- end }}
-              echo "buckets ready"; touch /tmp/ready
+              # weed shell exits 0 even when the filer is not up yet, so verify the buckets exist
+              # (mirrors upstream's readiness loop) before reporting ready.
+              until echo "s3.bucket.list" | /usr/bin/weed shell -master=127.0.0.1:9333 2>/dev/null | grep -q "{{ index $buckets 0 }}"; do
+                {{- range $buckets }}
+                echo "s3.bucket.create -name {{ . }}" | /usr/bin/weed shell -master=127.0.0.1:9333 >/dev/null 2>&1 || true
+                {{- end }}
+                sleep 3
+              done
+              echo "buckets ready:"; echo "s3.bucket.list" | /usr/bin/weed shell -master=127.0.0.1:9333 2>/dev/null
+              touch /tmp/ready
               wait $WEED_PID
           ports:
             - name: s3

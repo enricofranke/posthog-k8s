@@ -65,8 +65,4 @@ jobs:
         run: make e2e-test
       - name: Diagnostics on failure
         if: failure()
-        run: |
-          kubectl -n posthog get pods -o wide
-          kubectl -n posthog get events --sort-by=.lastTimestamp | tail -80
-          for p in $(kubectl -n posthog get pods -o name); do echo "=== $p"; kubectl -n posthog logs $p --all-containers --tail=80 || true; done
-          kubectl -n posthog describe pods | grep -A15 -E "^Name:|Events:" | head -400
+        run: e2e/diagnose.sh posthog

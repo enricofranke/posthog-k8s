@@ -42,7 +42,11 @@ services:
     replicas: 1
     resources:
       requests: {cpu: 100m, memory: 512Mi}
-      limits: {memory: 2Gi}
+      limits: {memory: 3Gi}
+  worker:
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {memory: 3Gi}
   browserless:
     enabled: false
   clickhouse:

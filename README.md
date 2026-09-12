@@ -1,94 +1,158 @@
-# posthog-k8s
+<h1 align="center">posthog-k8s</h1>
 
-**A community Helm chart for self-hosting [PostHog](https://posthog.com) on Kubernetes.**
-Session replay, error tracking, logs, feature flags, surveys and the whole ingestion pipeline,
-generated from PostHog's own `docker-compose.hobby.yml` at a pinned commit and tested end-to-end
-on every change.
+<p align="center">
+  <b>Self-host <a href="https://posthog.com">PostHog</a> on Kubernetes with a Helm chart that is generated from PostHog's own compose file and proven end-to-end on every commit.</b><br>
+  Product analytics · Web analytics · Session replay · Error tracking · Logs · Feature flags · Surveys
+</p>
 
-[![CI](https://github.com/enricofranke/posthog-k8s/actions/workflows/ci.yml/badge.svg)](https://github.com/enricofranke/posthog-k8s/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-![Chart](https://img.shields.io/badge/chart-0.1.0-informational)
-![Upstream](https://img.shields.io/badge/PostHog-18b824b7-informational)
+<p align="center">
+  <a href="https://github.com/enricofranke/posthog-k8s/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/enricofranke/posthog-k8s/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/enricofranke/posthog-k8s/releases"><img alt="Release" src="https://img.shields.io/github/v/release/enricofranke/posthog-k8s?label=chart"></a>
+  <img alt="Upstream" src="https://img.shields.io/badge/PostHog-18b824b7-1d4aff">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+</p>
 
-> **Status: alpha (0.1.x).** Installs and passes an end-to-end test on every commit; running in
-> production by the maintainers with external PostgreSQL and S3. Expect values to change before 1.0.
-> Not tested yet: in-place upgrades between chart versions, Gateway API ingress.
+```bash
+helm install posthog oci://ghcr.io/enricofranke/charts/posthog \
+  --namespace posthog --create-namespace \
+  --set posthog.siteUrl=https://posthog.example.com
+```
 
-> Not affiliated with or endorsed by PostHog Inc. PostHog stopped supporting Kubernetes in 2023
-> and archived its Helm chart in May 2026. This project exists because a lot of us still want to
-> run PostHog next to our other workloads, with GitOps, our own Postgres and our own S3.
+> **Status: alpha (0.1.x).** Installs from scratch and passes an end-to-end test (signup, event,
+> exception → issue, OTLP log, feature flag) on every commit. Runs in production for the
+> maintainers with CloudNativePG and S3. Values may still change before 1.0; in-place chart
+> upgrades are not yet covered by CI.
+>
+> Not affiliated with or endorsed by PostHog Inc. PostHog [stopped supporting Kubernetes in 2023](https://posthog.com/blog/sunsetting-helm-support-posthog)
+> and archived its chart in 2026. This project exists for the people who still want PostHog next to
+> their other workloads, with GitOps, their own Postgres and their own S3.
 
 ---
 
+## Contents
+
+- [Why this chart](#why-this-chart)
+- [How it works](#how-it-works)
+- [Quick start (evaluation)](#quick-start-evaluation)
+- [Production setup](#production-setup)
+- [Behind an identity-aware proxy](#behind-an-identity-aware-proxy)
+- [Fast first start (schema seed)](#fast-first-start-schema-seed)
+- [Sizing](#sizing)
+- [Operations](#operations)
+- [What is and is not included](#what-is-and-is-not-included)
+- [Repository layout](#repository-layout)
+- [Contributing, support, license](#contributing-support-license)
+
 ## Why this chart
 
-PostHog's only supported self-hosting path is a ~35-container docker-compose file on one VM. The
-compose file is excellent and kept up to date. So instead of hand-writing 30 Deployments that drift
-from upstream within weeks, this chart is **generated from that compose file**:
-
-```
-PostHog/posthog @ <pinned commit>
-  docker-compose.base.yml ─┐
-  docker-compose.hobby.yml ├─► tools/sync_upstream.py ─► charts/posthog/upstream.yaml
-  .env.services            │      (rules.yaml)              charts/posthog/files/upstream/**
-  docker/clickhouse/*.xml ─┘                                          │
-                                                          generic templates render
-                                                          Deployments, StatefulSets, Jobs,
-                                                          ConfigMaps, the router, NetworkPolicies
-```
+PostHog's only supported self-hosting path is a ~35-container docker-compose file on a single
+VM. That file is excellent and kept current by PostHog. Hand-written Kubernetes manifests drift
+from it within weeks. So this chart does not hand-write anything: a generator reads the compose
+files at a pinned upstream commit and turns them into chart data; generic templates render the
+Kubernetes objects. Upgrading PostHog is "bump the commit, read the diff, run CI".
 
 What you get on top of a straight translation:
 
 | | |
 |---|---|
-| **Two front doors** | A Caddy router with an `app` listener (full UI/API, put it behind your identity-aware proxy) and an `ingest` listener that forwards **only** SDK paths and strips identity headers. Your login page never has to be on the internet. |
-| **Your datastores** | External PostgreSQL (CloudNativePG `uri` secret works out of the box) and S3-compatible object storage for replays and exports. Bundled single-node PostgreSQL and SeaweedFS for evaluation. |
-| **Secrets by reference** | Every secret can live in a Secret you own (`existingSecret`, `secrets.keys`). Generated once and kept when you let the chart do it. Nothing secret in the pod spec. |
-| **Pinned** | Every image pinned by digest at sync time. `appVersion` is the upstream commit. |
-| **Secure defaults** | Non-root everywhere, all capabilities dropped, no service-account tokens, optional NetworkPolicies, PodDisruptionBudgets, ClickHouse app users with real passwords. |
-| **Tested** | Generator unit tests, `helm lint`, `helm unittest`, `kubeconform`, and a full install on kind that signs up, sends an event, an exception, an OTLP log line and evaluates a flag. |
+| **Two front doors** | A Caddy router with an `app` listener (full UI and API, put it behind your SSO proxy) and an `ingest` listener that forwards **only** SDK paths and strips identity headers. Your login page never has to be on the internet. |
+| **Your datastores** | External PostgreSQL (a CloudNativePG `uri` secret works out of the box) and S3-compatible object storage for replays and exports. Bundled single-node PostgreSQL and SeaweedFS for evaluation. |
+| **Secrets by reference** | Every secret can live in a Secret you own. When you let the chart generate them, they are created once and kept. Nothing secret in the pod spec. |
+| **Pinned and signed** | Every image pinned by digest at sync time; chart releases pushed to GHCR and signed with cosign (keyless). `appVersion` is the upstream commit. |
+| **Secure defaults** | Non-root everywhere, all capabilities dropped, no service-account tokens, optional NetworkPolicies, PodDisruptionBudgets, ClickHouse application users with real passwords. |
+| **Fast first start** | A schema seed skips the 20-minute migration marathon of a fresh database. |
+| **Tested for real** | Generator unit tests, `helm lint`, `helm unittest`, `kubeconform`, Caddy config validation, and a full install on kind that signs up, sends an event, an exception, an OTLP log line and evaluates a flag. |
 
-## Quick start
+## How it works
+
+```
+PostHog/posthog @ <pinned commit>
+  docker-compose.base.yml  ─┐
+  docker-compose.hobby.yml ─┼─►  tools/sync_upstream.py  ─►  charts/posthog/upstream.yaml   (services, images, env, routes)
+  .env.services            ─┤        + tools/rules.yaml       charts/posthog/files/upstream/ (ClickHouse XML, Kafka topics, ...)
+  docker/clickhouse/*.xml  ─┘                                 charts/posthog/upstream.lock   (commit + sha256 of every input)
+                                                                          │
+                                                       generic templates + your values.yaml
+                                                                          ▼
+                                   Deployments · StatefulSets · Jobs · Services · ConfigMaps · Secret
+                                   Router (Caddy) · NetworkPolicies · PDBs · ServiceMonitors
+```
+
+Everything the generator does not understand is a hard error, not a guess: a new service, a new
+variable or a new hostname in the compose file fails the sync until `tools/rules.yaml` says what
+to do with it.
+
+Inside the cluster it looks like this:
+
+```
+ Browsers / apps                Your SSO proxy / private ingress          Your other workloads
+   https://ph.example.com         https://posthog.example.com               <release>-router:8081
+        │ (public)                     │ (X-Forwarded-User, ...)                  │
+        ▼                              ▼                                          │
+  router :8081 "ingest" ◄────── router :8080 "app" ◄──────────────────────────────┘
+  /e /i/v0 /i/v1/logs /s /decide /flags /array /static      everything: UI + API
+        └──────────────────┬───────────────────┘
+                           ▼
+  web · worker · temporal-django-worker · plugins · ingestion-{general,sessionreplay,error-tracking,logs,traces}
+  recording-api · capture · replay-capture · capture-logs · feature-flags · property-defs · hypercache
+  livestream · personhog · cymbal · browserless
+  ClickHouse · Zookeeper · Redpanda · Redis · Valkey · Temporal · PostgreSQL* · SeaweedFS*      (* or external)
+```
+
+## Quick start (evaluation)
+
+Needs a cluster with a default StorageClass and about 18 GB of allocatable memory. Works on kind,
+k3s, k0s, Docker Desktop with enough RAM.
 
 ```bash
 helm install posthog oci://ghcr.io/enricofranke/charts/posthog \
   --namespace posthog --create-namespace \
-  --set posthog.siteUrl=https://posthog.example.com \
-  --set posthog.publicUrl=https://ph.example.com \
-  --set router.ingress.enabled=true \
-  --set router.ingress.className=nginx
+  --set posthog.siteUrl=http://localhost:8080 \
+  --set posthog.secureCookies=false
+
+kubectl -n posthog get pods -w        # first start: 15–25 minutes (see "Fast first start")
+kubectl -n posthog port-forward svc/posthog-router 8080:8080
+open http://localhost:8080            # create the first user
 ```
 
-First start takes a few minutes: ClickHouse and Redpanda come up, the `migrate` job applies the
-schema, then `web` becomes ready. Open the site URL and create the first user.
-
-Or from a clone:
+Small machine? Use the CI values as a starting point, they fit a 16 GB box:
 
 ```bash
-git clone https://github.com/enricofranke/posthog-k8s && cd posthog-k8s
-helm install posthog charts/posthog -n posthog --create-namespace -f my-values.yaml
+helm install posthog oci://ghcr.io/enricofranke/charts/posthog -n posthog --create-namespace \
+  -f https://raw.githubusercontent.com/enricofranke/posthog-k8s/main/charts/posthog/ci/kind-values.yaml
 ```
 
-Minimum footprint with the defaults: about 18 GB RAM requested across ~34 pods, 160 GB of
-volumes (ClickHouse 100, Redpanda 50, PostgreSQL 20, SeaweedFS 50 when bundled). The CI values
-file (`charts/posthog/ci/kind-values.yaml`) shows a small configuration that fits a 16 GB machine.
+Send something to it:
 
-## Production values
+```bash
+TOKEN=phc_...   # Settings → Project → Project API key
+curl -X POST http://localhost:8081/e/ -H 'Content-Type: application/json' \
+  -d "{\"api_key\":\"$TOKEN\",\"event\":\"hello\",\"distinct_id\":\"me\"}"
+```
+
+## Production setup
+
+The full walkthrough with CloudNativePG, S3, local volumes, ingress and NetworkPolicies is in
+[docs/production.md](docs/production.md). The short version:
 
 ```yaml
 posthog:
-  siteUrl: https://posthog.example.com     # UI, behind your SSO proxy / private ingress
-  publicUrl: https://ph.example.com        # what browsers and apps send events to
+  siteUrl: https://posthog.example.com     # the UI, behind your SSO proxy or private ingress
+  publicUrl: https://ph.example.com        # what browsers and mobile apps send events to
   existingSecret: posthog-app              # SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET
+  multiOrg: true                           # one organization per product/team
 
 postgresql:
+  bundled: false
   external:
-    host: posthog-pg-rw                    # e.g. a CloudNativePG cluster
-    existingSecret: posthog-pg-app         # CNPG app secret
+    host: posthog-pg-rw                    # CloudNativePG service
+    username: app
+    database: posthog
+    existingSecret: posthog-pg-app         # the CNPG app secret
     urlKey: uri                            #   -> DATABASE_URL
     passwordKey: password                  #   -> PGPASSWORD
-    username: app
-    database: app
+temporal:
+  skipDbCreate: true                       # create `temporal` and `temporal_visibility` yourself (CNPG Database CRs)
 
 objectStorage:
   endpoint: https://s3.eu-central-1.amazonaws.com
@@ -96,6 +160,20 @@ objectStorage:
   region: eu-central-1
   forcePathStyle: false
   existingSecret: posthog-s3               # keys accessKeyId / secretAccessKey
+  bundled: {enabled: false}
+
+secrets:
+  keys:                                    # route any key to a Secret you manage
+    CLICKHOUSE_API_PASSWORD: {secret: posthog-clickhouse}
+    CLICKHOUSE_APP_PASSWORD: {secret: posthog-clickhouse}
+    CLICKHOUSE_BILLING_PASSWORD: {secret: posthog-clickhouse}
+    CLICKHOUSE_DICT_READER_PASSWORD: {secret: posthog-clickhouse}
+
+services:
+  clickhouse:
+    persistence: {size: 500Gi, storageClass: fast-ssd}
+  web:
+    replicas: 2
 
 router:
   ingress:
@@ -103,14 +181,7 @@ router:
     className: nginx
     hosts:
       - {host: ph.example.com, listener: ingest}   # public
-    # the app listener is reached through Teleport / oauth2-proxy / a private ingress instead
-
-services:
-  clickhouse:
-    persistence: {size: 500Gi, storageClass: fast}
-    nodeSelector: {topology.kubernetes.io/zone: a}
-  web:
-    replicas: 2
+      # the app listener is reached through Teleport / oauth2-proxy / a private ingress instead
 
 networkPolicy:
   enabled: true
@@ -123,87 +194,64 @@ metrics:
   serviceMonitor: {enabled: true}
 ```
 
-PostgreSQL needs these databases besides the main one (Temporal creates its two when the user
-may `CREATEDB`, otherwise create them and set `temporal.skipDbCreate: true`): `temporal`,
-`temporal_visibility`. The upstream init scripts in `charts/posthog/files/upstream/docker/postgres-init-scripts/`
-list the additional databases the bundled instance creates; the hobby configuration keeps persons
-and cohorts in the main database, so none of them is required for this chart's defaults.
+**Argo CD:** Helm hooks map to sync hooks; set every secret explicitly or via `existingSecret`
+(Argo renders without `lookup`, generated secrets would change on each sync); use
+`ServerSideApply=true`. Example Application in [docs/argocd.md](docs/argocd.md).
 
-### Argo CD
-
-Helm hooks map to Argo sync hooks. Two things to know:
-
-- `lookup` does not run in Argo's `helm template`, so **set every secret** (or use `existingSecret`
-  / `secrets.keys`); otherwise generated secrets would change on every sync.
-- Use `ServerSideApply=true`; the ClickHouse ConfigMaps are large.
-
-### Behind an identity-aware proxy
+## Behind an identity-aware proxy
 
 Point your proxy (Teleport Application Access, oauth2-proxy, Pomerium, Authelia, Cloudflare
 Access) at `<release>-router:8080` and expose `<release>-router:8081` publicly for SDK traffic.
-The ingest listener answers 404 for anything that is not an SDK path (`/e`, `/i/v0`, `/i/v1/logs`,
-`/s`, `/decide`, `/flags`, `/array`, `/static`, ...). Header-based automatic login
-(`authProxy.*`) is on the roadmap, see [docs/auth-proxy.md](docs/auth-proxy.md).
-
-## What is and is not in the box
-
-**In:** every service from `docker-compose.hobby.yml` except the ones replaced by cluster-native
-pieces: `db` → PostgreSQL template or external, `seaweedfs`/`objectstorage` → S3 or bundled
-SeaweedFS, `proxy` → the router, `elasticsearch` → Temporal on PostgreSQL visibility,
-`temporal-ui`/`temporal-admin-tools` → not workloads.
-
-**Not (yet):** high availability for ClickHouse and Redpanda (single instance on a PersistentVolume,
-same as the compose deployment; PostHog's replicated ClickHouse layout is a separate project),
-external ClickHouse/Kafka, PostHog's paid features (they are Cloud-only; the `ee/` code has its own
-license and this chart does not enable it), automatic upstream bumps without a human reading the diff.
-
-PostHog says the hobby deployment is meant for "a couple hundred thousand events a month". People
-run it well beyond that; watch ClickHouse memory and Kafka lag and scale the node.
+The ingest listener answers 404 for anything that is not an SDK path. Header-based automatic
+login and group → organization mapping is the next milestone; see [docs/auth-proxy.md](docs/auth-proxy.md).
+A complete Teleport example lives in [docs/production.md](docs/production.md#teleport-example).
 
 ## Fast first start (schema seed)
 
-A fresh PostHog database needs roughly 1,500 PostgreSQL and 300 ClickHouse migrations. On a small
-cluster that is 10–20 minutes during which `web` is not ready. The chart can restore a **schema
-seed** instead: a `pg_dump` plus a native ClickHouse `BACKUP` of an already-migrated, empty
-instance. The bundled datastores pick it up on their first start and the `migrate` job only has
-to confirm that everything is applied.
+A fresh PostHog database needs ~1,500 PostgreSQL and ~300 ClickHouse migrations. On a small
+cluster that is 10–25 minutes during which `web` is not ready. A **schema seed** (a `pg_dump` plus
+a native ClickHouse `BACKUP` of an already-migrated, empty instance) is restored by the bundled
+datastores on their first start, so the `migrate` job only has to confirm.
 
 ```yaml
 seed:
-  hostPath: /var/lib/posthog-seed     # directory on the node with posthog.pgdump + clickhouse/seed/
-  # or: existingClaim: posthog-seed   # a PVC with the same layout
+  hostPath: /var/lib/posthog-seed      # posthog.pgdump + clickhouse/seed/ on the node
+  # or: existingClaim: posthog-seed    # a PVC with the same layout
 ```
 
-Seeds are produced with `e2e/export-seed.sh` from a running release and are attached to chart
-releases as `posthog-schema-seed-<version>.tar.gz`. Later upgrades migrate incrementally anyway; the seed only matters for the first
-start. CI uses the same mechanism (cached per upstream commit): a cold end-to-end run installs in
-~27 minutes on a 4 vCPU runner, a seeded one in ~10.
+Every release ships `posthog-schema-seed-<version>.tar.gz`; `e2e/export-seed.sh` produces one from
+a running release. CI uses the same mechanism: a cold end-to-end run installs in ~27 minutes on a
+4 vCPU runner, a seeded one in ~10.
 
-## Upgrading
+## Sizing
 
-```bash
-make sync UPSTREAM=<commit sha on PostHog master>   # regenerates upstream.yaml + files
-git diff charts/posthog/upstream.yaml               # read what changed upstream
-make test-tools lint unittest kubeconform
-```
+Defaults request about 18 GB of memory across ~34 pods and 160 GB of volumes (ClickHouse 100,
+Redpanda 50, PostgreSQL 20, SeaweedFS 50 when bundled). Measured on a 3-project instance with
+2 M events and 6,500 recordings per month: ~20 GB RSS in total, ClickHouse and web being the
+largest. Concurrency knobs: `GRANIAN_WORKERS` (web, default 2) and `WEB_CONCURRENCY` (celery,
+default 2) via `services.<name>.env`.
 
-When the compose file introduces something the rules do not know (a new service, a new variable,
-a new host), the generator **fails instead of guessing**. Teach `tools/rules.yaml` about it and
-re-run. `CONTRIBUTING.md` walks through it.
+## Operations
 
-Data migrations run in the `migrate` hook job on every upgrade (`./bin/migrate`: Django,
-ClickHouse, async migrations). Take a backup first. `helm rollback` rolls the pods back, not the
-schema.
+| | |
+|---|---|
+| **Upgrade PostHog** | `make sync UPSTREAM=<commit>` regenerates `upstream.yaml`; read the diff; CI installs it. Data migrations run in the `migrate` Job on every install and upgrade. Back up first; `helm rollback` rolls pods back, not the schema. |
+| **Backups** | PostgreSQL holds everything you cannot lose (users, dashboards, flags, issues) plus `ENCRYPTION_SALT_KEYS` from the env secret. ClickHouse: `BACKUP DATABASE posthog TO File('/var/lib/clickhouse/backups/<name>')` (the chart allows that path). Object storage: bucket versioning. |
+| **Monitoring** | `metrics.serviceMonitor.enabled` renders ServiceMonitors for services that expose Prometheus metrics. |
+| **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md): why a pod waits, where the migrate job logs, what the compat aliases are for. |
 
-## Backups
+## What is and is not included
 
-- **PostgreSQL** (users, dashboards, flags, cohorts, error-tracking issues): back it up like any
-  Postgres. This is the data you cannot lose. `ENCRYPTION_SALT_KEYS` from the env secret belongs
-  to the same backup.
-- **ClickHouse** (events, replay metadata): `BACKUP DATABASE posthog TO S3(...)` from a CronJob or
-  clickhouse-backup; restores need the same schema version.
-- **Object storage** (replay blobs, exports): bucket versioning/replication on your S3.
-- **Redpanda**: transient, no backup.
+**Included:** every service from `docker-compose.hobby.yml` except the ones replaced by
+cluster-native pieces: `db` → bundled PostgreSQL template or external; `seaweedfs`/`objectstorage`
+→ S3 or bundled SeaweedFS; `proxy` → the router; `elasticsearch` → Temporal on PostgreSQL
+visibility; `temporal-ui`/`temporal-admin-tools` → not workloads.
+
+**Not (yet):** high availability for ClickHouse and Redpanda (single instance on a
+PersistentVolume, same as the compose deployment; PostHog's replicated ClickHouse layout is a
+separate project); external ClickHouse/Kafka; PostHog's paid features (Cloud-only; the `ee/`
+code has its own license and this chart does not enable it); automatic upstream bumps without a
+human reading the diff.
 
 ## Repository layout
 
@@ -212,21 +260,21 @@ charts/posthog/           the chart (templates are generic, data is generated)
   upstream.yaml           GENERATED service definitions
   upstream.lock           GENERATED upstream commit + input hashes
   files/upstream/         GENERATED config files (ClickHouse XML, Kafka topics, Temporal config)
+  files/chart/            chart-owned files (web start script, zoo.cfg, seed hooks)
   ci/kind-values.yaml     values for the CI end-to-end run
   tests/                  helm-unittest suites
 tools/                    generator + rules + tests
-e2e/smoke.py              end-to-end test used in CI
+e2e/                      install/smoke/seed scripts used by CI
+docs/                     production, Argo CD, troubleshooting, auth proxy roadmap
 ```
 
-## Contributing and support
+## Contributing, support, license
 
-Issues and PRs welcome, especially: verified production setups, external ClickHouse/Kafka, the
-auth-proxy overlay, HA ClickHouse. There is no commercial support and no SLA; the maintainers run
-this chart themselves and fix what breaks for them first. Security reports: see
-[SECURITY.md](SECURITY.md).
+Issues and PRs welcome, in particular: verified production setups, external ClickHouse/Kafka,
+the auth-proxy overlay, HA ClickHouse. See [CONTRIBUTING.md](CONTRIBUTING.md). There is no
+commercial support and no SLA; the maintainers run this chart themselves and fix what breaks for
+them first. Security reports: [SECURITY.md](SECURITY.md).
 
-## License
-
-Apache-2.0 for everything in this repository. PostHog is MIT-licensed except the `ee/` directory,
-which has its own license; the chart uses PostHog's public images unmodified and does not enable
-enterprise features. "PostHog" is a trademark of PostHog Inc.
+Apache-2.0 for everything in this repository. PostHog is MIT-licensed except the `ee/`
+directory, which has its own license; the chart uses PostHog's public images unmodified and
+does not enable enterprise features. "PostHog" is a trademark of PostHog Inc.

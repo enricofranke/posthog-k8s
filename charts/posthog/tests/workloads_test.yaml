@@ -132,3 +132,18 @@ tests:
           path: spec.template.spec.containers[0].name
           value: browserless
           skipEmptyTemplates: true
+
+  - it: lets services.<name>.env override an upstream variable instead of duplicating it
+    set:
+      services.web.env:
+        - {name: GRANIAN_WORKERS, value: "1"}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: GRANIAN_WORKERS, value: "1"}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: GRANIAN_WORKERS, value: "2"}

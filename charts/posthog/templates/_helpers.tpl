@@ -166,7 +166,11 @@ usage: include "posthog.env" (list $ $svcName $envList)
 */}}
 {{- define "posthog.env" -}}
 {{- $ := index . 0 -}}{{- $svc := index . 1 -}}{{- $env := index . 2 -}}
+{{- /* values.services.<name>.env overrides upstream entries with the same name */ -}}
+{{- $ov := (index $.Values.services $svc | default dict).env | default list -}}
+{{- $skip := dict -}}{{- range $ov }}{{- $_ := set $skip .name true -}}{{- end -}}
 {{- range $env }}
+{{- if not (hasKey $skip .name) }}
 - name: {{ .name }}
 {{- if .secret }}
 {{- $ref := splitn "/" 2 (include "posthog.secretRef" (list $ .secret)) }}
@@ -181,6 +185,7 @@ usage: include "posthog.env" (list $ $svcName $envList)
   value: {{ tpl (.value | toString) $ | quote }}
 {{- else }}
   value: {{ .value | toString | quote }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end -}}

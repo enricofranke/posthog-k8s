@@ -4,6 +4,17 @@ All notable changes to the chart. The format follows [Keep a Changelog](https://
 versions follow [SemVer](https://semver.org/). `appVersion` is the upstream PostHog commit the
 chart data was generated from.
 
+## [0.1.1] - 2026-09-12
+
+### Added
+- `services.<name>.persistence.selector` and `extraOverrides` to bind StatefulSet claims to
+  pre-provisioned PersistentVolumes (local volumes by label).
+- `services.<name>.env` overrides upstream variables by name instead of duplicating them.
+- Schema seed attached to releases; docs: production walkthrough, Argo CD, troubleshooting.
+
+### Fixed
+- Release workflow: cosign signature push (docker login).
+
 ## [0.1.0] - 2026-09-12
 
 First alpha release.

@@ -5,7 +5,7 @@ description: >-
   docker-compose at a pinned upstream commit. Includes session replay, error tracking, logs,
   feature flags and the full ingestion pipeline. Not affiliated with PostHog Inc.
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "18b824b7932ad13f25602b4ea0376fc568ac4b22"
 kubeVersion: ">=1.30.0-0"
 home: https://github.com/enricofranke/posthog-k8s

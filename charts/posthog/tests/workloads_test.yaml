@@ -147,3 +147,33 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content: {name: GRANIAN_WORKERS, value: "2"}
+
+
+  - it: binds StatefulSet claims to labelled PersistentVolumes through persistence.selector
+    set:
+      services.clickhouse.persistence:
+        storageClass: local-retain
+        selector: {matchLabels: {storage.example/purpose: clickhouse-posthog}}
+      services.zookeeper.persistence:
+        selector: {matchLabels: {purpose: zk-data}}
+        extraOverrides:
+          datalog: {selector: {matchLabels: {purpose: zk-datalog}}, size: 3Gi}
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels["storage.example/purpose"]
+          value: clickhouse-posthog
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: clickhouse
+      - equal:
+          path: spec.volumeClaimTemplates[1].spec.selector.matchLabels.purpose
+          value: zk-datalog
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: zookeeper
+      - equal:
+          path: spec.volumeClaimTemplates[1].spec.resources.requests.storage
+          value: 3Gi
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: zookeeper

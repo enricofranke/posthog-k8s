@@ -197,7 +197,10 @@ authProxy:
 # Per-service overrides keyed by upstream service name (see upstream.yaml). Every service accepts:
 # enabled, replicas, resources, env (list), podAnnotations, nodeSelector, tolerations, affinity,
 # topologySpreadConstraints, podSecurityContext, containerSecurityContext, readOnlyRootFilesystem,
-# persistence: {size, storageClass}, extraVolumes, extraVolumeMounts, priorityClassName.
+# persistence: {size, storageClass, selector, extraOverrides: {<claim>: {size, storageClass, selector}}},
+# extraVolumes, extraVolumeMounts, priorityClassName, args, env.
+# `selector` binds the claim to pre-provisioned PersistentVolumes (e.g. local volumes with a label);
+# zookeeper has a second claim named `datalog` which extraOverrides can target.
 services:
   web:
     replicas: 2

@@ -301,20 +301,29 @@ spec:
         {{- with $p.storageClass }}
         storageClassName: {{ . }}
         {{- end }}
+        {{- with $p.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         resources:
           requests:
             storage: {{ $p.size }}
     {{- range $svc.persistence.extra }}
+    {{- $extraOv := index ($p.extraOverrides | default dict) .name | default dict }}
     - metadata:
         name: {{ .name }}
       spec:
         accessModes: [ReadWriteOnce]
-        {{- with $p.storageClass }}
+        {{- with ($extraOv.storageClass | default $p.storageClass) }}
         storageClassName: {{ . }}
+        {{- end }}
+        {{- with $extraOv.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .size }}
+            storage: {{ $extraOv.size | default .size }}
     {{- end }}
   {{- end }}
 {{- if $svc.ports }}

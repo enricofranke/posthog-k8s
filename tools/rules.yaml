@@ -19,6 +19,8 @@ upstream:
     - docker/kafka/topics.txt
     - docker/temporal/dynamicconfig/development-sql.yaml
     - docker/livestream/configs-hobby.yml
+    # Reference copy: the chart's files/chart/web/start.sh mirrors this script without setpriv.
+    - bin/docker-server
   # Whole directories copied verbatim (bundled PostgreSQL init scripts, ClickHouse init).
   dirs:
     - docker/postgres-init-scripts
@@ -116,7 +118,9 @@ probes:
 # wrapper scripts (compose/start = wait + migrate + docker-server); in Kubernetes the
 # migration is a Job and the containers run the underlying binaries directly.
 commands:
-  web: ["./bin/docker-server"]
+  # docker-server drops privileges with setpriv, which fails in a pod that already runs
+  # non-root; the chart ships an equivalent script without that step (files/chart/web/start.sh).
+  web: ["/bin/bash", "/chart/start.sh"]
   temporal-django-worker: ["./bin/temporal-django-worker"]
 
 # Default resource requests/limits per service (values.yaml can override every one of them).
@@ -317,6 +321,8 @@ mounts:
   # Chart-owned file (files/chart/...): the image writes zoo.cfg itself only when running as root.
   zookeeper:
     - {path: /conf/zoo.cfg, chartFile: zookeeper/zoo.cfg, subPath: true}
+  web:
+    - {path: /chart/start.sh, chartFile: web/start.sh, subPath: true}
   # GeoIP database: ships inside the posthog/posthog image (/code/share/GeoLite2-City.mmdb) and is
   # copied into the pods that need it by the same init container that copies the ClickHouse assets.
   plugins:

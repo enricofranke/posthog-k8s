@@ -1574,7 +1574,8 @@ services:
       value: '{{ .Values.posthog.multiOrg | toString }}'
       tpl: true
     command:
-    - ./bin/docker-server
+    - /bin/bash
+    - /chart/start.sh
     readinessProbe:
       httpGet:
         path: /_readyz
@@ -1586,6 +1587,10 @@ services:
       limits:
         memory: 2Gi
     securityContext: *id002
+    mounts:
+    - path: /chart/start.sh
+      chartFile: web/start.sh
+      subPath: true
     dependsOn:
     - clickhouse
     - db

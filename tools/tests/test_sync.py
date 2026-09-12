@@ -230,3 +230,16 @@ def test_aliases_cover_every_helper_and_service_host():
     assert data["aliases"]["kafka"] == {"helper": "kafka"}
     assert data["aliases"]["capture"] == {"service": "capture"}
     assert "plugins" not in data["aliases"], "only services that are rendered get an alias"
+
+
+def test_web_start_script_matches_upstream_docker_server_defaults():
+    """files/chart/web/start.sh is upstream's bin/docker-server minus setpriv; every export line
+    upstream sets must appear verbatim in the chart script, so an upstream change fails here."""
+    root = Path(__file__).resolve().parents[2] / "charts" / "posthog" / "files"
+    upstream = (root / "upstream" / "bin" / "docker-server").read_text().splitlines()
+    ours = (root / "chart" / "web" / "start.sh").read_text()
+    exports = [l.strip() for l in upstream if l.strip().startswith("export ")]
+    missing = [e for e in exports if e not in ours]
+    assert exports and not missing, f"start.sh is out of sync with bin/docker-server: {missing}"
+    assert "setpriv" not in ours.replace("does not call\n# setpriv", "").split("set -e", 1)[1]
+    assert 'exec granian "$APP_TARGET"' in ours

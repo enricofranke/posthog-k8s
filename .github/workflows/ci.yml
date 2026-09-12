@@ -39,6 +39,8 @@ jobs:
         run: make unittest
       - name: kubeconform (default values and every values file in charts/posthog/ci)
         run: make kubeconform
+      - name: Validate the rendered Caddyfile with caddy
+        run: make caddy-validate
 
   e2e:
     name: End-to-end on kind

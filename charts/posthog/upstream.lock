@@ -1,6 +1,7 @@
 ref: 18b824b7932ad13f25602b4ea0376fc568ac4b22
 inputs:
   .env.services: f4464e2c98a5691675176a5071d9db971fde8e39a665bee3b9cb489190b95d6d
+  bin/docker-server: fc1693e3d3561cceaa26256d96155f2532880eba34126e05debac903e4ab2f44
   docker-compose.base.yml: e69fdce7b7173579dd4c0902f621630f0c3e7ffac91f6828e3b753c3fcff51ac
   docker-compose.hobby.yml: a4544d94786d035fbe8da3d56524a81e301b3214c5512d6d81d295a5c04d5581
   docker/clickhouse/config.d/default.xml: 729f9bdf0c5e490d211f51c27195b75813a68ab5a1ff0aa8e047a0550a714844

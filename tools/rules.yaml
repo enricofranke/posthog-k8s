@@ -48,8 +48,14 @@ stateful:
 
 # Services rendered as Jobs (hooks) instead of long-running workloads.
 jobs:
-  kafka-init: {hook: 'post-install,post-upgrade', weight: -5}
   asyncmigrationscheck: {hook: 'post-install,post-upgrade', weight: 5}
+
+# One-shot compose services that must run alongside another service from the first start
+# (a post-install hook would only run once every pod is ready, which consumers of the missing
+# topics never become). Rendered as an extra container in the target pod that runs the script
+# and then sleeps.
+sidecars:
+  kafka-init: kafka
 
 # The container port each service listens on (compose rarely declares them). `metrics` is the
 # Prometheus port where a service exposes one.

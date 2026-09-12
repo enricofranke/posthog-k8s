@@ -854,7 +854,7 @@ services:
     dependsOn:
     - zookeeper
   kafka-init:
-    kind: job
+    kind: sidecar
     image: kafka-init
     ports: []
     env: []
@@ -880,9 +880,7 @@ services:
     commandTpl: true
     resources: *id001
     securityContext: *id002
-    job:
-      hook: post-install,post-upgrade
-      weight: -5
+    sidecarOf: kafka
     mounts:
     - path: /topics.txt
       file: docker/kafka/topics.txt
@@ -1106,8 +1104,7 @@ services:
       port: 6738
     env:
     - name: PLUGIN_SERVER_MODE
-      value: '{{ include "posthog.serviceName" (list $ "recording-api") }}'
-      tpl: true
+      value: recording-api
     - name: DATABASE_URL
       secret: DATABASE_URL
     - name: REDIS_URL
@@ -1897,6 +1894,51 @@ routes:
   service: web
   port: 8000
   fallback: true
+aliases:
+  db:
+    helper: postgresql
+  redis7:
+    helper: redis
+  valkey:
+    helper: valkey
+  kafka:
+    helper: kafka
+  clickhouse:
+    helper: clickhouse
+  temporal:
+    helper: temporal
+  web:
+    service: web
+  plugins:
+    service: plugins
+  recording-api:
+    service: recording-api
+  feature-flags:
+    service: feature-flags
+  hypercache-server:
+    service: hypercache-server
+  livestream:
+    service: livestream
+  personhog-router:
+    service: personhog-router
+  personhog-replica:
+    service: personhog-replica
+  cymbal:
+    service: cymbal
+  cymbal-resolution:
+    service: cymbal-resolution
+  browserless:
+    service: browserless
+  capture:
+    service: capture
+  replay-capture:
+    service: replay-capture
+  capture-logs:
+    service: capture-logs
+  seaweedfs:
+    storage: true
+  objectstorage:
+    storage: true
 imageDirs:
 - posthog/idl
 - posthog/user_scripts

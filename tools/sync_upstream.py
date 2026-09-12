@@ -242,24 +242,36 @@ class Rewriter:
             return "", whole_secret
         return out, None
 
+    HOST_ENV_SUFFIXES = ("_HOST", "_HOSTS", "_SEEDS", "_ADDR", "_ADDRESS")
+
     def rewrite_hosts(self, text: str, service: str, name: str) -> tuple[str, bool]:
-        """Rewrite bare compose hostnames (kafka:9092, http://plugins:6738, redis://redis7:6379/)."""
+        """Rewrite compose hostnames to chart services.
+
+        A hostname is only rewritten in a context where it is unambiguously a host: after `//` or
+        `@` (URLs), before `:<port>`, or as the whole value of a variable whose name says it is a
+        host (`*_HOST`, `*_HOSTS`, `*_SEEDS`, `*_ADDR`). That keeps values like
+        PLUGIN_SERVER_MODE=recording-api intact."""
         changed = False
         hosts = self.rules["hosts"]
-        pattern = re.compile(
-            r"(?P<pre>^|[\s'\"=,]|//|@)(?P<host>" + "|".join(re.escape(h) for h in hosts) + r")(?P<post>$|[:/\s'\",])"
-        )
+        alt = "|".join(re.escape(h) for h in hosts)
+        pattern = re.compile(r"(?P<pre>^|[\s'\"=,]|//|@)(?P<host>" + alt + r")(?P<post>$|[:/\s'\",])")
+        host_var = name.upper().endswith(self.HOST_ENV_SUFFIXES)
 
         def repl(m: re.Match) -> str:
             nonlocal changed
-            host = m.group("host")
+            host, pre, post = m.group("host"), m.group("pre"), m.group("post")
+            after = text[m.end("host"):m.end("host") + 2]
+            in_url = pre in ("//", "@")
+            has_port = post == ":" and after[1:2].isdigit()
+            whole_value = m.start("host") == 0 and m.end("host") == len(text)
+            if not (in_url or has_port or (whole_value and host_var)):
+                return m.group(0)
             rule = hosts[host]
             if rule.get("storage") or rule.get("drop"):
                 self.problems.append(f"{service}.{name}: storage/dropped host {host!r} used in {text!r}")
                 return m.group(0)
-            expr = self.host_expr(host)
             changed = True
-            return f"{m.group('pre')}{expr}{m.group('post')}"
+            return f"{pre}{self.host_expr(host)}{post}"
 
         return pattern.sub(repl, text), changed
 
@@ -414,7 +426,7 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
     rw = Rewriter(rules)
     out_services: dict[str, dict] = {}
     images: dict[str, dict] = {}
-    known = set(rules["excluded"]) | set(rules["stateful"]) | set(rules["jobs"]) | set(rules["ports"])
+    known = set(rules["excluded"]) | set(rules["stateful"]) | set(rules["jobs"]) | set(rules["ports"]) | set(rules.get("sidecars", {}))
 
     for name, svc in services.items():
         if name in rules["excluded"]:
@@ -460,8 +472,11 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
 
         ports = rules["ports"].get(name, {})
         port_list = [{"name": pn, "port": pv} for pn, pv in ports.items() if pn != "metrics"]
+        kind = "job" if name in rules["jobs"] else "statefulset" if name in rules["stateful"] else "deployment"
+        if name in rules.get("sidecars", {}):
+            kind = "sidecar"
         entry: dict[str, Any] = {
-            "kind": "job" if name in rules["jobs"] else "statefulset" if name in rules["stateful"] else "deployment",
+            "kind": kind,
             "image": key,
             "ports": port_list,
             "env": [e.out() for e in env],
@@ -484,6 +499,8 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
             entry["persistence"] = rules["stateful"][name]
         if name in rules["jobs"]:
             entry["job"] = rules["jobs"][name]
+        if name in rules.get("sidecars", {}):
+            entry["sidecarOf"] = rules["sidecars"][name]
         if name in rules["mounts"]:
             entry["mounts"] = rules["mounts"][name]
         deps = svc.get("depends_on") or []
@@ -531,6 +548,17 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
     if rw.problems:
         raise SyncError("upstream changed in ways the rules do not cover:\n  - " + "\n  - ".join(sorted(set(rw.problems))))
 
+    # Compose hostnames the code assumes as defaults (PGHOST=db, CLICKHOUSE_HOST=clickhouse, ...).
+    # The chart renders ExternalName aliases for them so hidden defaults resolve in Kubernetes too.
+    aliases = {}
+    for host, rule in rules["hosts"].items():
+        if "helper" in rule:
+            aliases[host] = {"helper": rule["helper"]}
+        elif "service" in rule and rule["service"] in out_services:
+            aliases[host] = {"service": rule["service"]}
+        elif rule.get("storage"):
+            aliases[host] = {"storage": True}
+
     data = {
         "upstream": {
             "repo": f"https://github.com/{source.repo}",
@@ -541,6 +569,7 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
         "services": dict(sorted(out_services.items())),
         "excluded": rules["excluded"],
         "routes": routes,
+        "aliases": aliases,
         "imageDirs": rules["upstream"]["image_dirs"],
     }
     return data, files

@@ -73,19 +73,21 @@ Jobs: the migrate job (chart-defined, uses the web service's env) plus upstream 
 {{- end -}}
 {{- if .Values.migrations.enabled }}
 {{- $migrate := deepCopy $web }}
+{{- /* Not a hook: on a fresh install the datastores only exist once the release is applied, and
+       web/worker wait for this Job through their init container. A new Job per image+chart
+       version keeps upgrades working (Job specs are immutable). */}}
+{{- $rev := printf "%s-%s" (include "posthog.image" (list . "posthog")) .Chart.Version | sha256sum | trunc 8 }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "posthog.serviceName" (list . "migrate") }}
+  name: {{ include "posthog.serviceName" (list . "migrate") }}-{{ $rev }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "posthog.labels" . | nindent 4 }}
     app.kubernetes.io/component: migrate
   annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-10"
-    helm.sh/hook-delete-policy: before-hook-creation
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
 {{ include "posthog.jobSpec" (list . "migrate" $migrate (list "./bin/migrate") (list)) }}
 {{- end }}

@@ -10,6 +10,7 @@ VALUES="${VALUES:-$CHART/ci/kind-values.yaml}"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 progress() {
+  set +e
   while true; do
     sleep 60
     echo "=== $(date -u +%H:%M:%S) pods"

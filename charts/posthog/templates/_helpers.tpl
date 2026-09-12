@@ -267,3 +267,34 @@ checksum/values: {{ toYaml $.Values.posthog | sha256sum | trunc 16 }}
     requests: {cpu: 10m, memory: 64Mi}
     limits: {memory: 256Mi}
 {{- end -}}
+
+{{/*
+Init container that blocks until Django migrations are applied (the migrate Job ran). Keeps web
+and the workers from crash-looping on a fresh database.
+*/}}
+{{- define "posthog.waitForMigrationsInitContainer" -}}
+{{- $ := index . 0 -}}{{- $svc := index . 1 -}}
+- name: wait-for-migrations
+  image: {{ include "posthog.image" (list $ "posthog") | quote }}
+  imagePullPolicy: IfNotPresent
+  command: ["/bin/sh", "-ec"]
+  args:
+    - |
+      i=0
+      until python manage.py migrate --check >/dev/null 2>&1; do
+        i=$((i+1)); [ $((i % 6)) -eq 0 ] && echo "waiting for database migrations ($((i*10))s)"
+        sleep 10
+      done
+      echo "migrations applied"
+  env:
+    {{- include "posthog.env" (list $ "wait-for-migrations" $svc.env) | nindent 4 }}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+{{- end -}}

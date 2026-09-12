@@ -201,3 +201,32 @@ def test_rules_cover_every_hobby_service_kind_exactly_once():
         assert name not in RULES["stateful"] and name not in RULES["excluded"]
     for name in RULES["excluded"]:
         assert name not in RULES["ports"], f"excluded {name} must not have ports"
+
+
+def test_host_rewrite_needs_a_host_context():
+    """A compose service name used as a plain value (PLUGIN_SERVER_MODE=recording-api) stays as is;
+    the same word is rewritten in URLs, before a port, or as the whole value of a *_HOST variable."""
+    rw = su.Rewriter(RULES)
+    env = {e.name: e for e in rw.env("recording-api", {
+        "PLUGIN_SERVER_MODE": "recording-api",
+        "RECORDING_API_URL": "http://recording-api:6738",
+        "CYMBAL_REMOTE_RESOLUTION_HOST": "cymbal-resolution",
+        "TEMPORAL_HOST": "temporal",
+        "KAFKA_HOSTS": "kafka",
+        "SOME_LABEL": "kafka",
+    })}
+    assert env["PLUGIN_SERVER_MODE"].value == "recording-api" and not env["PLUGIN_SERVER_MODE"].tpl
+    assert "posthog.serviceName" in env["RECORDING_API_URL"].value
+    assert "cymbal-resolution" in env["CYMBAL_REMOTE_RESOLUTION_HOST"].value and env["CYMBAL_REMOTE_RESOLUTION_HOST"].tpl
+    assert env["TEMPORAL_HOST"].tpl and env["KAFKA_HOSTS"].tpl
+    assert env["SOME_LABEL"].value == "kafka" and not env["SOME_LABEL"].tpl
+    assert rw.problems == []
+
+
+def test_aliases_cover_every_helper_and_service_host():
+    src = FakeSource({"docker-compose.base.yml": MINI_BASE, "docker-compose.hobby.yml": MINI_HOBBY, ".env.services": ""})
+    data, _ = su.build(mini_rules(), src, want_digests=False)
+    assert data["aliases"]["db"] == {"helper": "postgresql"}
+    assert data["aliases"]["kafka"] == {"helper": "kafka"}
+    assert data["aliases"]["capture"] == {"service": "capture"}
+    assert "plugins" not in data["aliases"], "only services that are rendered get an alias"

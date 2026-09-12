@@ -216,8 +216,18 @@ services:
   redis7:
     persistence: {size: 2Gi, storageClass: ""}
 
+# Cluster DNS domain, used for ExternalName aliases.
+clusterDomain: cluster.local
+
+compatAliases:
+  # -- Create ExternalName Services named like the compose services (db, kafka, clickhouse, redis7,
+  # temporal, plugins, ...). PostHog's code uses those names as defaults in places env does not
+  # cover; without the aliases some components would try to reach `kafka:9092`. One release per
+  # namespace when enabled.
+  enabled: true
+
 migrations:
-  # -- Run `bin/migrate` as a Helm/Argo hook after install and upgrade.
+  # -- Run `bin/migrate` as a Job on install and upgrade; web and the workers wait for it.
   enabled: true
   backoffLimit: 3
   activeDeadlineSeconds: 3600

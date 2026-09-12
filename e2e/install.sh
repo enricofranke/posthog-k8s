@@ -12,8 +12,8 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 
 # Fail fast: a pod that sits in CrashLoopBackOff with many restarts for several consecutive
 # checks is not going to recover; stop waiting for the full helm timeout.
-FAILFAST_RESTARTS="${FAILFAST_RESTARTS:-8}"
-FAILFAST_STRIKES="${FAILFAST_STRIKES:-5}"
+FAILFAST_RESTARTS="${FAILFAST_RESTARTS:-5}"
+FAILFAST_STRIKES="${FAILFAST_STRIKES:-3}"
 declare -A strikes
 progress() {
   set +e

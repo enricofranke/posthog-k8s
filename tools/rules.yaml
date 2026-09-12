@@ -316,12 +316,12 @@ mounts:
     - {path: /etc/clickhouse-server/config.d/default.xml, file: docker/clickhouse/config.d/default.xml}
     - {path: /etc/clickhouse-server/users.xml, file: docker/clickhouse/users.xml}
     - {path: /etc/clickhouse-server/user_defined_function.xml, file: docker/clickhouse/user_defined_function.xml}
-    - {path: /docker-entrypoint-initdb.d, dir: docker/clickhouse/docker-entrypoint-initdb.d}
+    # extraChartFiles are merged into the same directory through a projected volume.
+    - {path: /docker-entrypoint-initdb.d, dir: docker/clickhouse/docker-entrypoint-initdb.d, extraChartFiles: [clickhouse/zz-seed.sh]}
     - {path: /idl, imageDir: posthog/idl}
     - {path: /var/lib/clickhouse/user_scripts, imageDir: posthog/user_scripts}
     # Chart additions: backup path config and the schema-seed hook (nested into the upstream dirs).
     - {path: /etc/clickhouse-server/config.d/zz-chart.xml, chartFile: clickhouse/zz-chart.xml, subPath: true}
-    - {path: /docker-entrypoint-initdb.d/zz-seed.sh, chartFile: clickhouse/zz-seed.sh, subPath: true}
   kafka-init:
     - {path: /topics.txt, file: docker/kafka/topics.txt, subPath: true}
   temporal:

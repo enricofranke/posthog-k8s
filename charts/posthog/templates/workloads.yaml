@@ -224,9 +224,25 @@ spec:
         {{- $vn := printf "cfg-%s" (.dir | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40) }}
         {{- if not (hasKey $seen $vn) }}{{- $_ := set $seen $vn true }}
         - name: {{ $vn }}
+          {{- if .extraChartFiles }}
+          {{- /* upstream directory plus chart-owned files, merged into one directory */}}
+          projected:
+            defaultMode: 0755
+            sources:
+              - configMap:
+                  name: {{ include "posthog.configMapName" (list $root .dir) }}
+              {{- range .extraChartFiles }}
+              - configMap:
+                  name: {{ include "posthog.configMapName" (list $root (printf "chart/%s" (dir .))) }}
+                  items:
+                    - key: {{ base . }}
+                      path: {{ base . }}
+              {{- end }}
+          {{- else }}
           configMap:
             name: {{ include "posthog.configMapName" (list $root .dir) }}
             defaultMode: 0755
+          {{- end }}
         {{- end }}
         {{- else if .imageDir }}
         - name: upstream-{{ .imageDir | replace "/" "-" | replace "_" "-" }}

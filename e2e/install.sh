@@ -6,6 +6,7 @@ NAMESPACE="${NAMESPACE:-posthog}"
 RELEASE="${RELEASE:-posthog}"
 CHART="${CHART:-charts/posthog}"
 VALUES="${VALUES:-$CHART/ci/kind-values.yaml}"
+EXTRA_VALUES="${EXTRA_VALUES:-}"   # e.g. charts/posthog/ci/seed-values.yaml
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
@@ -40,7 +41,7 @@ progress() {
 }
 # A fresh install applies thousands of Django and ClickHouse migrations; on a 4 vCPU runner
 # that takes 20-25 minutes. Real failures are caught earlier by the fail-fast check above.
-helm upgrade --install "$RELEASE" "$CHART" -n "$NAMESPACE" -f "$VALUES" --wait --timeout "${HELM_TIMEOUT:-25m}" &
+helm upgrade --install "$RELEASE" "$CHART" -n "$NAMESPACE" -f "$VALUES" ${EXTRA_VALUES:+-f "$EXTRA_VALUES"} --wait --timeout "${HELM_TIMEOUT:-25m}" &
 HELM_PID=$!
 progress &
 PROGRESS_PID=$!

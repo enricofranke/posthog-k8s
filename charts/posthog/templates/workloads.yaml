@@ -157,6 +157,9 @@ spec:
             {{- end }}
             - name: tmp
               mountPath: /tmp
+            {{- if eq $name "clickhouse" }}
+            {{- include "posthog.seedMount" $root | nindent 12 }}
+            {{- end }}
             {{- with $ov.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -202,6 +205,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if eq $name "clickhouse" }}
+        {{- include "posthog.seedVolume" $root | nindent 8 }}
+        {{- end }}
         {{- $seen := dict }}
         {{- range $mounts }}
         {{- $f := ternary (printf "chart/%s" (.chartFile | default "")) (.file | default "") (hasKey . "chartFile") }}
@@ -212,6 +218,7 @@ spec:
         - name: {{ $vn }}
           configMap:
             name: {{ $cm }}
+            defaultMode: 0755
         {{- end }}
         {{- else if .dir }}
         {{- $vn := printf "cfg-%s" (.dir | replace "/" "-" | replace "_" "-" | replace "." "-" | trunc 40) }}

@@ -356,6 +356,12 @@ services:
       imageDir: posthog/idl
     - path: /var/lib/clickhouse/user_scripts
       imageDir: posthog/user_scripts
+    - path: /etc/clickhouse-server/config.d/zz-chart.xml
+      chartFile: clickhouse/zz-chart.xml
+      subPath: true
+    - path: /docker-entrypoint-initdb.d/zz-seed.sh
+      chartFile: clickhouse/zz-seed.sh
+      subPath: true
     dependsOn:
     - kafka
     - zookeeper

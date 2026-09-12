@@ -302,3 +302,26 @@ and the workers from crash-looping on a fresh database.
     - name: tmp
       mountPath: /tmp
 {{- end -}}
+
+{{/* Seed volume (schema seed for a fast first start), empty when not configured. */}}
+{{- define "posthog.seedVolume" -}}
+{{- if .Values.seed.existingClaim }}
+- name: seed
+  persistentVolumeClaim:
+    claimName: {{ .Values.seed.existingClaim }}
+    readOnly: true
+{{- else if .Values.seed.hostPath }}
+- name: seed
+  hostPath:
+    path: {{ .Values.seed.hostPath }}
+    type: Directory
+{{- end }}
+{{- end -}}
+
+{{- define "posthog.seedMount" -}}
+{{- if or .Values.seed.existingClaim .Values.seed.hostPath }}
+- name: seed
+  mountPath: /seed
+  readOnly: true
+{{- end }}
+{{- end -}}

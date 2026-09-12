@@ -72,6 +72,11 @@ spec:
             - name: init
               mountPath: /docker-entrypoint-initdb.d
               readOnly: true
+            - name: seed-hook
+              mountPath: /docker-entrypoint-initdb.d/90-seed.sh
+              subPath: 90-seed.sh
+              readOnly: true
+            {{- include "posthog.seedMount" . | nindent 12 }}
             - name: run
               mountPath: /var/run/postgresql
             - name: tmp
@@ -81,6 +86,11 @@ spec:
           configMap:
             name: {{ include "posthog.configMapName" (list . "docker/postgres-init-scripts") }}
             defaultMode: 0755
+        - name: seed-hook
+          configMap:
+            name: {{ include "posthog.configMapName" (list . "chart/postgres") }}
+            defaultMode: 0755
+        {{- include "posthog.seedVolume" . | nindent 8 }}
         - name: run
           emptyDir: {}
         - name: tmp

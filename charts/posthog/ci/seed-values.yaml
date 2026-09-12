@@ -1,0 +1,4 @@
+# Added on top of kind-values.yaml when the CI cache holds a schema seed for the current
+# upstream commit. The seed was copied into the kind node at /seed by the workflow.
+seed:
+  hostPath: /seed

@@ -226,6 +226,17 @@ compatAliases:
   # namespace when enabled.
   enabled: true
 
+# Fast first start. A fresh PostHog database needs ~1500 PostgreSQL and ~300 ClickHouse
+# migrations, which takes 10-20 minutes on small clusters. A schema seed (pg_dump + native
+# ClickHouse BACKUP of an already-migrated, empty instance, produced with e2e/export-seed.sh and
+# published with each chart release) is restored by the bundled datastores on first start, so
+# the migrate job only has to confirm that everything is applied.
+seed:
+  # -- Directory on the node holding posthog.pgdump and clickhouse/seed/ (hostPath; CI and single-node setups).
+  hostPath: ""
+  # -- Existing PersistentVolumeClaim with the same layout (any cluster).
+  existingClaim: ""
+
 migrations:
   # -- Run `bin/migrate` as a Job on install and upgrade; web and the workers wait for it.
   enabled: true

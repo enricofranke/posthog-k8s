@@ -1567,6 +1567,8 @@ services:
       value: default
     - name: CLICKHOUSE_PASSWORD
       value: ''
+    - name: GRANIAN_WORKERS
+      value: '2'
     - name: IS_BEHIND_PROXY
       value: 'true'
     - name: TRUST_ALL_PROXIES
@@ -1589,9 +1591,9 @@ services:
     resources:
       requests:
         cpu: 250m
-        memory: 1Gi
+        memory: 1536Mi
       limits:
-        memory: 2Gi
+        memory: 4Gi
     securityContext: *id002
     mounts:
     - path: /chart/start.sh
@@ -1748,15 +1750,19 @@ services:
       value: default
     - name: CLICKHOUSE_PASSWORD
       value: ''
+    - name: WEB_CONCURRENCY
+      value: '2'
+    - name: CELERY_MAX_TASKS_PER_CHILD
+      value: '200'
     args:
     - ./bin/docker-worker-celery
     - --with-scheduler
     resources:
       requests:
         cpu: 100m
-        memory: 768Mi
+        memory: 1Gi
       limits:
-        memory: 2Gi
+        memory: 3Gi
     securityContext: *id002
     dependsOn:
     - browserless

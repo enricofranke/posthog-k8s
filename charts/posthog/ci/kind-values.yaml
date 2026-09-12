@@ -40,10 +40,14 @@ objectStorage:
 services:
   web:
     replicas: 1
+    env:
+      - {name: GRANIAN_WORKERS, value: "1"}
     resources:
       requests: {cpu: 100m, memory: 512Mi}
-      limits: {memory: 3Gi}
+      limits: {memory: 4Gi}
   worker:
+    env:
+      - {name: WEB_CONCURRENCY, value: "1"}
     resources:
       requests: {cpu: 100m, memory: 512Mi}
       limits: {memory: 3Gi}

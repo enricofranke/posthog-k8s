@@ -126,8 +126,8 @@ commands:
 # Default resource requests/limits per service (values.yaml can override every one of them).
 resources:
   default: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 1Gi}}
-  web: {requests: {cpu: 250m, memory: 1Gi}, limits: {memory: 2Gi}}
-  worker: {requests: {cpu: 100m, memory: 768Mi}, limits: {memory: 2Gi}}
+  web: {requests: {cpu: 250m, memory: 1536Mi}, limits: {memory: 4Gi}}
+  worker: {requests: {cpu: 100m, memory: 1Gi}, limits: {memory: 3Gi}}
   temporal-django-worker: {requests: {cpu: 100m, memory: 768Mi}, limits: {memory: 2Gi}}
   plugins: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1536Mi}}
   ingestion-general: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1536Mi}}
@@ -290,11 +290,18 @@ env_companions:
 # Env added on top of upstream (things compose gets from host mounts or defaults that differ in K8s).
 env_extra:
   web:
+    # Upstream starts 4 granian workers (~700 MB each). Two fit the default memory limit;
+    # raise both together via values.services.web.{env,resources}.
+    - {name: GRANIAN_WORKERS, value: '2'}
     - {name: IS_BEHIND_PROXY, value: 'true'}
     - {name: TRUST_ALL_PROXIES, value: 'true'}
     - {name: DISABLE_SECURE_SSL_REDIRECT, value: 'true'}
     - {name: SECURE_COOKIES, value: '{{ .Values.posthog.secureCookies | toString }}', tpl: true}
     - {name: MULTI_ORG_ENABLED, value: '{{ .Values.posthog.multiOrg | toString }}', tpl: true}
+  worker:
+    # Celery prefork concurrency defaults to the CPU count; each fork is a full Django process.
+    - {name: WEB_CONCURRENCY, value: '2'}
+    - {name: CELERY_MAX_TASKS_PER_CHILD, value: '200'}
   temporal:
     - {name: SKIP_DB_CREATE, value: '{{ .Values.temporal.skipDbCreate | toString }}', tpl: true}
     - {name: DBNAME, value: '{{ .Values.temporal.database }}', tpl: true}

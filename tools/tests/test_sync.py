@@ -176,7 +176,7 @@ def test_build_end_to_end_on_a_miniature_compose():
     data, files = su.build(mini_rules(), src, want_digests=False)
     assert set(data["services"]) == {"web", "worker", "capture"}
     web = data["services"]["web"]
-    assert web["command"] == ["./bin/docker-server"], "hobby wrapper script replaced by the real entrypoint"
+    assert web["command"] == ["/bin/bash", "/chart/start.sh"], "hobby wrapper script replaced by the chart's start script"
     env = {e["name"]: e for e in web["env"]}
     assert env["SECRET_KEY"] == {"name": "SECRET_KEY", "secret": "SECRET_KEY"}
     assert env["IS_BEHIND_PROXY"]["value"] == "true", "env_extra applied"

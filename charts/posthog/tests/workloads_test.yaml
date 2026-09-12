@@ -20,7 +20,7 @@ tests:
           pattern: ^posthog/posthog:[0-9a-f]{40}
       - equal:
           path: spec.template.spec.containers[0].command
-          value: ["./bin/docker-server"]
+          value: ["/bin/bash", "/chart/start.sh"]
       - equal:
           path: spec.template.spec.automountServiceAccountToken
           value: false

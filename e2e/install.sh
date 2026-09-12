@@ -25,6 +25,6 @@ progress &
 PROGRESS_PID=$!
 trap 'kill $PROGRESS_PID 2>/dev/null || true' EXIT
 
-helm upgrade --install "$RELEASE" "$CHART" -n "$NAMESPACE" -f "$VALUES" --wait --timeout 30m
+helm upgrade --install "$RELEASE" "$CHART" -n "$NAMESPACE" -f "$VALUES" --wait --timeout "${HELM_TIMEOUT:-15m}"
 echo "=== install done"
 kubectl -n "$NAMESPACE" get pods

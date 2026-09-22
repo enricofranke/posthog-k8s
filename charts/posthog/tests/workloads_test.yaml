@@ -177,3 +177,57 @@ tests:
         documentSelector:
           path: spec.template.spec.containers[0].name
           value: zookeeper
+
+  - it: lets values replace a service readiness probe handler and derives the startup probe from it
+    set:
+      services:
+        browserless:
+          readinessProbe:
+            tcpSocket:
+              port: http
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: browserless
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: http
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket.port
+          value: http
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe.httpGet
+
+  - it: keeps the upstream readiness probe when values do not override it
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: browserless
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /pressure
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /pressure
+
+  - it: lets values change the zookeeper pod user so it matches a pre-provisioned local volume
+    set:
+      services:
+        zookeeper:
+          podSecurityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: zookeeper
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+

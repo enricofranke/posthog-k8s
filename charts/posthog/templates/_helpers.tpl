@@ -149,7 +149,7 @@ usage: include "posthog.secretRef" (list $ "DATABASE_URL") -> "name/key"
 {{- include "posthog.secretRef" (list $ "OBJECT_STORAGE_ACCESS_KEY_ID") -}}
 {{- else if and (eq $key "SESSION_RECORDING_SECRET_ACCESS_KEY") (not $sr.secretAccessKey) -}}
 {{- include "posthog.secretRef" (list $ "OBJECT_STORAGE_SECRET_ACCESS_KEY") -}}
-{{- else if and (has $key (list "SECRET_KEY" "ENCRYPTION_SALT_KEYS" "BROWSERLESS_TOKEN" "INTERNAL_API_SECRET")) $.Values.posthog.existingSecret -}}
+{{- else if and (has $key (list "SECRET_KEY" "ENCRYPTION_SALT_KEYS" "BROWSERLESS_TOKEN" "INTERNAL_API_SECRET" "INTERNAL_REQUEST_TOKEN" "RECORDING_API_JWT_SECRET")) $.Values.posthog.existingSecret -}}
 {{- printf "%s/%s" $.Values.posthog.existingSecret $key -}}
 {{- else -}}
 {{- printf "%s/%s" (include "posthog.envSecretName" $) $key -}}

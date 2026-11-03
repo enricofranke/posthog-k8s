@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/enricofranke/posthog-k8s/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/enricofranke/posthog-k8s/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/enricofranke/posthog-k8s/releases"><img alt="Release" src="https://img.shields.io/github/v/release/enricofranke/posthog-k8s?label=chart"></a>
-  <img alt="Upstream" src="https://img.shields.io/badge/PostHog-18b824b7-1d4aff">
+  <img alt="Upstream" src="https://img.shields.io/badge/PostHog-4ba4b09d-1d4aff">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
 </p>
 
@@ -90,11 +90,11 @@ Inside the cluster it looks like this:
         │ (public)                     │ (X-Forwarded-User, ...)                  │
         ▼                              ▼                                          │
   router :8081 "ingest" ◄────── router :8080 "app" ◄──────────────────────────────┘
-  /e /i/v0 /i/v1/logs /s /decide /flags /array /static      everything: UI + API
+  /e /i/v0 /i/v1/logs /i/v1/ai /s /decide /flags /array /static   everything: UI + API
         └──────────────────┬───────────────────┘
                            ▼
   web · worker · temporal-django-worker · plugins · ingestion-{general,sessionreplay,error-tracking,logs,traces}
-  recording-api · capture · replay-capture · capture-logs · feature-flags · property-defs · hypercache
+  recording-api · capture · capture-ai · replay-capture · capture-logs · feature-flags · property-defs(-ai) · hypercache
   livestream · personhog · cymbal · browserless
   ClickHouse · Zookeeper · Redpanda · Redis · Valkey · Temporal · PostgreSQL* · SeaweedFS*      (* or external)
 ```
@@ -139,7 +139,8 @@ The full walkthrough with CloudNativePG, S3, local volumes, ingress and NetworkP
 posthog:
   siteUrl: https://posthog.example.com     # the UI, behind your SSO proxy or private ingress
   publicUrl: https://ph.example.com        # what browsers and mobile apps send events to
-  existingSecret: posthog-app              # SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET
+  existingSecret: posthog-app              # SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET,
+                                           # INTERNAL_REQUEST_TOKEN, RECORDING_API_JWT_SECRET
   multiOrg: true                           # one organization per product/team
 
 postgresql:
@@ -168,6 +169,7 @@ secrets:
     CLICKHOUSE_APP_PASSWORD: {secret: posthog-clickhouse}
     CLICKHOUSE_BILLING_PASSWORD: {secret: posthog-clickhouse}
     CLICKHOUSE_DICT_READER_PASSWORD: {secret: posthog-clickhouse}
+    CLICKHOUSE_SIGNALS_PASSWORD: {secret: posthog-clickhouse}
 
 services:
   clickhouse:

@@ -138,8 +138,8 @@ Put these in your secret manager and sync them (External Secrets, Sealed Secrets
 
 | Secret | Keys | Note |
 |---|---|---|
-| `posthog-app` | `SECRET_KEY`, `ENCRYPTION_SALT_KEYS`, `BROWSERLESS_TOKEN`, `INTERNAL_API_SECRET` | `ENCRYPTION_SALT_KEYS` must never change once data exists (32 hex chars) |
-| `posthog-clickhouse` | `CLICKHOUSE_API_PASSWORD`, `CLICKHOUSE_APP_PASSWORD`, `CLICKHOUSE_BILLING_PASSWORD`, `CLICKHOUSE_DICT_READER_PASSWORD` | any strong strings |
+| `posthog-app` | `SECRET_KEY`, `ENCRYPTION_SALT_KEYS`, `BROWSERLESS_TOKEN`, `INTERNAL_API_SECRET`, `INTERNAL_REQUEST_TOKEN`, `RECORDING_API_JWT_SECRET` | `ENCRYPTION_SALT_KEYS` must never change once data exists (32 hex chars); the last two are random strings (`openssl rand -hex 32`) |
+| `posthog-clickhouse` | `CLICKHOUSE_API_PASSWORD`, `CLICKHOUSE_APP_PASSWORD`, `CLICKHOUSE_BILLING_PASSWORD`, `CLICKHOUSE_DICT_READER_PASSWORD`, `CLICKHOUSE_SIGNALS_PASSWORD` | any strong strings |
 | `posthog-s3` | `accessKeyId`, `secretAccessKey` | the IAM user above |
 | `posthog-pg-app` | `uri`, `password` | created by CNPG |
 
@@ -152,6 +152,7 @@ secrets:
     CLICKHOUSE_APP_PASSWORD: {secret: posthog-clickhouse}
     CLICKHOUSE_BILLING_PASSWORD: {secret: posthog-clickhouse}
     CLICKHOUSE_DICT_READER_PASSWORD: {secret: posthog-clickhouse}
+    CLICKHOUSE_SIGNALS_PASSWORD: {secret: posthog-clickhouse}
 objectStorage:
   existingSecret: posthog-s3
 ```

@@ -21,6 +21,12 @@ tests:
           pattern: "reverse_proxy RELEASE-NAME-posthog-capture-logs:4318"
       - matchRegex:
           path: data.Caddyfile
+          pattern: "reverse_proxy RELEASE-NAME-posthog-capture-ai:3000"
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: "path /i/v1/ai/events"
+      - matchRegex:
+          path: data.Caddyfile
           pattern: "-X-Forwarded-User"
       - matchRegex:
           path: data.Caddyfile

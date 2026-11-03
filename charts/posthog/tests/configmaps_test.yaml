@@ -1,0 +1,15 @@
+suite: configmaps
+templates:
+  - configmaps.yaml
+tests:
+  - it: replaces every ClickHouse dev password in users.xml with an env reference
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-cfg-clickhouse
+    asserts:
+      - notMatchRegex:
+          path: data["users.xml"]
+          pattern: <password>(apipass|apppass|billingpass|dictreaderpass|signalspass)</password>
+      - matchRegex:
+          path: data["users.xml"]
+          pattern: <password from_env="CLICKHOUSE_SIGNALS_PASSWORD"/>

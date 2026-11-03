@@ -231,3 +231,112 @@ tests:
           path: spec.template.spec.securityContext.fsGroupChangePolicy
           value: OnRootMismatch
 
+
+  - it: collapses Temporal task queues on web, worker and temporal-django-worker (single worker polls them all)
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_USE_SINGLE_TASK_QUEUE, value: "true"}
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: web
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_USE_SINGLE_TASK_QUEUE, value: "true"}
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: worker
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_USE_SINGLE_TASK_QUEUE, value: "true"}
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: temporal-django-worker
+
+  - it: shares INTERNAL_REQUEST_TOKEN between web and feature-flags as an optional reference
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INTERNAL_REQUEST_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: INTERNAL_REQUEST_TOKEN
+                optional: true
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: web
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INTERNAL_REQUEST_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: INTERNAL_REQUEST_TOKEN
+                optional: true
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: feature-flags
+
+  - it: reads the new service-to-service secrets from posthog.existingSecret when set
+    set:
+      posthog.existingSecret: my-posthog
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: recording-api
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RECORDING_API_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-posthog
+                key: RECORDING_API_JWT_SECRET
+                optional: true
+
+  - it: gives the HyperCache readers the object-storage credentials by reference
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: hypercache-server
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: OBJECT_STORAGE_SECRET_ACCESS_KEY
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OBJECT_STORAGE_ENDPOINT
+            value: http://RELEASE-NAME-posthog-seaweedfs:8333
+
+  - it: passes the signals ClickHouse password to ClickHouse
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: clickhouse
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLICKHOUSE_SIGNALS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: CLICKHOUSE_SIGNALS_PASSWORD
+
+  - it: renders the AI capture service
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: capture-ai
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CAPTURE_MODE, value: ai}

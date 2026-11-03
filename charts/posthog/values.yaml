@@ -35,8 +35,10 @@ posthog:
   optOutCapture: false
   # -- Where the browser sends CSP reports; empty disables reporting.
   cspReportEndpoint: ""
-  # -- Existing Secret with keys SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET.
-  # Recommended for GitOps: the chart does not generate secrets when this is set.
+  # -- Existing Secret with keys SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET,
+  # INTERNAL_REQUEST_TOKEN, RECORDING_API_JWT_SECRET. Recommended for GitOps: the chart does not generate
+  # secrets when this is set. The last two are optional: without them flag test evaluation in the UI
+  # fails and recording-api falls back to INTERNAL_API_SECRET (see CHANGELOG 0.2.0).
   existingSecret: ""
   # -- Inline secrets (used only when existingSecret is empty). Empty values are generated on install
   # and kept across upgrades via lookup. NOTE: `helm template` and Argo CD render without lookup, so
@@ -46,6 +48,10 @@ posthog:
     encryptionSaltKeys: ""
     browserlessToken: ""
     internalApiSecret: ""
+    # -- Shared by web/worker/temporal-django-worker and feature-flags (Django -> flags calls).
+    internalRequestToken: ""
+    # -- Signs the team-scoped tokens web/worker/temporal-django-worker send to recording-api.
+    recordingApiJwtSecret: ""
     anthropicApiKey: ""
     openaiApiKey: ""
 
@@ -53,9 +59,10 @@ secrets:
   # -- Generate missing secret values at install time. Set false to fail instead of generating.
   generate: true
   # -- Route individual secret keys to an existing Secret: KEY: {secret: name, key: keyInSecret}.
-  # Keys: SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET, ANTHROPIC_API_KEY,
-  # OPENAI_API_KEY, DATABASE_URL, PGUSER, PGPASSWORD, CLICKHOUSE_API_PASSWORD, CLICKHOUSE_APP_PASSWORD,
-  # CLICKHOUSE_BILLING_PASSWORD, CLICKHOUSE_DICT_READER_PASSWORD, OBJECT_STORAGE_ACCESS_KEY_ID,
+  # Keys: SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET, INTERNAL_REQUEST_TOKEN,
+  # RECORDING_API_JWT_SECRET, ANTHROPIC_API_KEY, OPENAI_API_KEY, DATABASE_URL, PGUSER, PGPASSWORD,
+  # CLICKHOUSE_API_PASSWORD, CLICKHOUSE_APP_PASSWORD, CLICKHOUSE_BILLING_PASSWORD,
+  # CLICKHOUSE_DICT_READER_PASSWORD, CLICKHOUSE_SIGNALS_PASSWORD, OBJECT_STORAGE_ACCESS_KEY_ID,
   # OBJECT_STORAGE_SECRET_ACCESS_KEY, SESSION_RECORDING_ACCESS_KEY_ID, SESSION_RECORDING_SECRET_ACCESS_KEY.
   keys: {}
 
@@ -98,6 +105,8 @@ clickhouse:
     app: ""
     billing: ""
     dictReader: ""
+    # -- Read-only user for PostHog's Signals product (fails closed without it).
+    signals: ""
   external:
     host: ""
 

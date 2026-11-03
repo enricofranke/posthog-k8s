@@ -35,7 +35,8 @@ never got a sweep schedule, and insight alerts, subscriptions and digests did no
 - Scans stay "Running" and their child workflow `rasterize-recording` waits on
   `rasterization-task-queue`: the recording rasterizer is missing or crash-looping. See
   [rasterizer.md](rasterizer.md); `No usable sandbox!` in its log means the seccomp profile is
-  missing.
+  missing. A running pod whose log ends in `"state":"FAILED"` lost Temporal under it; with
+  `rasterizer.exitOnWorkerFailure` (default) it restarts on its own.
 - The first sweep after enabling a scanner can start a hundred scans at once.
   `temporal-django-worker` runs at most 10 activities in parallel (`MAX_CONCURRENT_ACTIVITIES`).
   Raise it only together with the worker's memory limit (`services.temporal-django-worker.{env,resources}`).

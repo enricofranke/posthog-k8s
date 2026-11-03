@@ -74,6 +74,9 @@ chart data was generated from.
 - Replay Vision failed every scan with `ExportedAsset ... produced empty video bytes`:
   temporal-django-worker had no `OBJECT_STORAGE_ENABLED` (hobby sets it on web and worker only,
   PostHog defaults to false), so it read the rendered videos through the disabled-storage stub.
+- The recording rasterizer stayed up without polling after a Temporal restart (worker state
+  `FAILED`, `/_health` still 200), so scans waited until they timed out. The chart runs it behind a
+  watcher that exits on that state (`rasterizer.exitOnWorkerFailure`, `rasterizer.command`).
 - temporal-django-worker ran out of memory on the first Replay Vision sweep (the SDK default allows
   100 parallel activities). It now sets `MAX_CONCURRENT_ACTIVITIES=10`, overridable by name.
 

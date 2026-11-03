@@ -172,3 +172,33 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: runs the image's command behind the FAILED watcher
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: /bin/sh
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '/"state":"FAILED"/ && /Worker state changed/'
+      - equal:
+          path: spec.template.spec.containers[0].command[3]
+          value: rasterizer
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [node, nodejs/dist/session-replay/recording-rasterizer/index.js]
+
+  - it: leaves the image's entrypoint alone without the watcher
+    set:
+      rasterizer.exitOnWorkerFailure: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].command
+      - notExists:
+          path: spec.template.spec.containers[0].args

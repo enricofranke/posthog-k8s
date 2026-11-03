@@ -108,6 +108,11 @@ spec:
         - name: rasterizer
           image: {{ include "posthog.image" (list . "recording-rasterizer") | quote }}
           imagePullPolicy: IfNotPresent
+          {{- if $r.exitOnWorkerFailure }}
+          # files/rasterizer/watch.sh: exit when the Temporal worker reports FAILED (it stays up otherwise).
+          command: ["/bin/sh", "-c", {{ .Files.Get "files/rasterizer/watch.sh" | quote }}, "rasterizer"]
+          args: {{ toJson $r.command }}
+          {{- end }}
           env:
             {{- include "posthog.env" (list . "recording-rasterizer" $env) | nindent 12 }}
             {{- with $r.env }}

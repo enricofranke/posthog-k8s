@@ -102,6 +102,18 @@ Temporal (7233), recording-api (6738), the bundled SeaweedFS when used, and publ
 ranges are blocked (`rasterizer.networkPolicy.blockedCidrs`); add an in-cluster S3 with
 `rasterizer.networkPolicy.extraEgress`.
 
+## When Temporal restarts
+
+If Temporal goes away while the rasterizer runs, the restarting frontend can answer a poll with
+`task queue name cannot start with reserved prefix /_sys/`. The SDK treats that as fatal and logs
+`Worker state changed` with `"state":"FAILED"`, but upstream's process stays up and `/_health` keeps
+answering 200, so the pod looks healthy while nothing polls `rasterization-task-queue`. The chart
+therefore runs the image's command (`rasterizer.command`) behind
+[`files/rasterizer/watch.sh`](../charts/posthog/files/rasterizer/watch.sh). On that log line the
+watcher stops the worker (SIGTERM, SIGKILL after 15 s) and the kubelet restarts the container. A
+normal SIGTERM is forwarded, so in-flight renders still drain. `rasterizer.exitOnWorkerFailure: false`
+runs the image's entrypoint directly.
+
 ## Sizing
 
 Each render holds a Chromium (300–800 MB). Defaults: `maxConcurrentActivities: 2`, requests

@@ -218,6 +218,12 @@ rasterizer:
   # -- Parallel renders per pod. Each one holds a Chromium (~300-800 MB); the worker takes fewer
   # above 70 % of the memory limit.
   maxConcurrentActivities: 2
+  # -- Restart the container when the Temporal worker reports FAILED. Upstream's process stays up in
+  # that state (e.g. after a Temporal restart) with a healthy /_health and no poller, so scans wait
+  # until they time out. The chart runs `command` behind files/rasterizer/watch.sh.
+  exitOnWorkerFailure: true
+  # -- The image's CMD (Dockerfile.recording-rasterizer), run by the watcher.
+  command: [node, nodejs/dist/session-replay/recording-rasterizer/index.js]
   # -- Seconds a stopping pod lets running renders finish; the rest are retried elsewhere.
   shutdownGraceSeconds: 120
   # -- Egress proxy for Chromium and the S3 client (e.g. `http://smokescreen:4750`). Recordings are

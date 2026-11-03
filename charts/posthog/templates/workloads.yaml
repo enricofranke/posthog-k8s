@@ -92,7 +92,7 @@ spec:
             {{- end }}
           {{- end }}
           env:
-            {{- include "posthog.env" (list $root $name $svc.env) | nindent 12 }}
+            {{- include "posthog.env" (list $root $name (concat $svc.env (include "posthog.geminiGatewayClientEnv" (list $root $name) | fromYamlArray))) | nindent 12 }}
             {{- if eq $name "clickhouse" }}
             {{- range $u, $k := dict "api" "CLICKHOUSE_API_PASSWORD" "app" "CLICKHOUSE_APP_PASSWORD" "billing" "CLICKHOUSE_BILLING_PASSWORD" "dict_reader" "CLICKHOUSE_DICT_READER_PASSWORD" "signals" "CLICKHOUSE_SIGNALS_PASSWORD" }}
             {{- $ref := splitn "/" 2 (include "posthog.secretRef" (list $root $k)) }}

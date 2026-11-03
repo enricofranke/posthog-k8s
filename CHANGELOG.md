@@ -34,6 +34,12 @@ chart data was generated from.
   hobby compose has no such worker. Chromium's sandbox needs a Localhost seccomp profile
   (`docs/seccomp/chrome-sandbox.json`, `rasterizer.seccompProfile`); with `networkPolicy.enabled`
   an egress policy keeps the browser off private addresses. See docs/rasterizer.md.
+- `gemini-gateway` (`geminiGateway.*`, off by default): a Gemini-only stand-in for PostHog's AI
+  gateway. Upstream's Replay Vision builds its Gemini client only through that gateway
+  (`AI_GATEWAY_URL`), which PostHog does not publish, so scans failed with `GatewayNotConfiguredError`.
+  A Caddy proxy checks an internal token, swaps in the Gemini key, drops PostHog's label headers and
+  keeps resumable uploads on itself; web, worker and temporal-django-worker get `AI_GATEWAY_URL` and
+  `AI_GATEWAY_API_KEY`. Secrets `GEMINI_API_KEY` and `AI_GATEWAY_API_KEY`. See docs/gemini-gateway.md.
 - Generator: `extra_images` in rules.yaml for images of chart-native services, pinned like the
   compose images.
 - `temporal-schedules`: a post-install/post-upgrade hook Job that creates PostHog's Temporal
@@ -80,6 +86,10 @@ chart data was generated from.
   more; superseded ones carry `argocd.argoproj.io/compare-options: IgnoreExtraneous`.
 
 ### Upgrade notes
+- Replay Vision no longer reads `REPLAY_VISION_GEMINI_API_KEY` or `GEMINI_API_KEY`: enable
+  `geminiGateway` and map your Gemini key with `secrets.keys.GEMINI_API_KEY` (docs/gemini-gateway.md).
+  Setting `AI_GATEWAY_URL` also points PostHog's other gateway features at it; they get 501 for
+  OpenAI/Anthropic models, as they failed without a gateway before.
 - Replay Vision and replay video exports need the new `recording-rasterizer`, and it needs a
   seccomp profile on the nodes: install `docs/seccomp/chrome-sandbox.json` and set
   `rasterizer.seccompProfile` (docs/rasterizer.md). Until then the pod logs

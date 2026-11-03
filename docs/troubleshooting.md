@@ -45,10 +45,15 @@ never got a sweep schedule, and insight alerts, subscriptions and digests did no
   (run it where the CLI reaches `<release>-temporal:7233`).
 - `Namespace default has no mapping defined for search attribute PostHogTeamId`: the hook Job did
   not run. Check `temporal.searchAttributes.enabled` and the Job's logs.
-- Replay Vision only analyses with Gemini: set `REPLAY_VISION_GEMINI_API_KEY` (falls back to
-  `GEMINI_API_KEY`) on web, worker and temporal-django-worker via `services.<name>.env`, from a
-  Secret. Self-hosted organizations are capped by `REPLAY_VISION_MONTHLY_CREDIT_QUOTA`, which
-  defaults to the free plan's allocation (2,500 credits per month at the time of writing).
+- Scans fail with `GatewayNotConfiguredError: AI_GATEWAY_URL and AI_GATEWAY_API_KEY must be
+  configured`: Replay Vision reaches Gemini only through PostHog's AI gateway now, and
+  `REPLAY_VISION_GEMINI_API_KEY` is no longer read. Enable `geminiGateway` with your Gemini key
+  ([gemini-gateway.md](gemini-gateway.md)).
+- Scans fail with `ExportedAsset ... produced empty video bytes`: temporal-django-worker reads the
+  rendered video without object storage. 0.2.0 sets `OBJECT_STORAGE_ENABLED=true` there; check that
+  no `services.temporal-django-worker.env` override turns it off.
+- Self-hosted organizations are capped by `REPLAY_VISION_MONTHLY_CREDIT_QUOTA`, which defaults to the
+  free plan's allocation (2,500 credits per month at the time of writing).
 
 ## `web` OOMKilled
 

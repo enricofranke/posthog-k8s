@@ -17,8 +17,11 @@ flowchart LR
   T --> R["recording-rasterizer<br/>Chromium + ffmpeg"]
   R -- "blocks" --> API[recording-api]
   R -- "MP4" --> S3[(object storage)]
-  tdw -- "video" --> G[Gemini]
+  tdw -- "video" --> GW["gemini-gateway"] --> G[Gemini]
 ```
+
+The analysis itself goes to Gemini through the chart's `gemini-gateway`
+([gemini-gateway.md](gemini-gateway.md)).
 
 ## Chromium's sandbox needs a seccomp profile
 

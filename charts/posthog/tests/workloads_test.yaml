@@ -365,3 +365,27 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].resources.limits.memory
           value: 3Gi
+
+  - it: caps temporal-django-worker at 10 parallel activities, overridable by name
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "10"}
+
+  - it: lets values raise the activity cap of temporal-django-worker
+    set:
+      services.temporal-django-worker.env:
+        - {name: MAX_CONCURRENT_ACTIVITIES, value: "40"}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "40"}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "10"}

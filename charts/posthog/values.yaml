@@ -137,6 +137,12 @@ temporal:
     enabled: true
     # -- Temporal namespace the PostHog services use (their TEMPORAL_NAMESPACE, upstream default `default`).
     namespace: default
+  schedules:
+    # -- Create PostHog's Temporal schedules after every install and upgrade (`manage.py
+    # schedule_temporal_workflows`): Replay Vision scanners, insight alerts, subscriptions, error
+    # tracking digests and the other periodic jobs. Upstream's bin/migrate skips this on hobby
+    # deploys; without it none of that periodic work runs. Idempotent.
+    enabled: true
 
 # Object storage for exports, symbol sets, AI blobs. S3-compatible.
 objectStorage:

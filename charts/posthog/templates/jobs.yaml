@@ -149,6 +149,38 @@ metadata:
 spec:
 {{ include "posthog.jobSpec" (list . "temporal-search-attributes" $sa (list "/bin/sh" "-ec") (list $script)) }}
 {{- end }}
+{{- if and .Values.temporal.schedules.enabled $tdw (ternary $tdwOv.enabled true (hasKey $tdwOv "enabled")) }}
+{{- /* PostHog's periodic work runs as Temporal schedules: Replay Vision scanners, insight alerts,
+       subscriptions, error tracking digests and ~130 more. Upstream's bin/migrate creates them only
+       when DEPLOYMENT is not `hobby`, and the hobby env sets it, so without this Job none of them
+       ever ran. The command reconciles idempotently; cloud-only schedules (usage reports, CRM
+       sync) stay off because CLOUD_DEPLOYMENT is unset. Weight 1: after the search attributes. */}}
+{{- $ts := deepCopy $tdw }}
+{{- $_ := set $ts "envService" "temporal-django-worker" }}
+{{- $_ := set $ts "resources" (dict "requests" (dict "cpu" "50m" "memory" "256Mi") "limits" (dict "memory" "2Gi")) }}
+{{- $script := `i=0
+until timeout 300 python manage.py schedule_temporal_workflows; do
+  i=$((i+1))
+  [ "$i" -ge 10 ] && { echo "Temporal schedules not created after $i attempts"; exit 1; }
+  echo "Creating the Temporal schedules failed (attempt $i), retrying in 15s"
+  sleep 15
+done` }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "posthog.serviceName" (list . "temporal-schedules") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "posthog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: temporal-schedules
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+{{ include "posthog.jobSpec" (list . "temporal-schedules" $ts (list "/bin/sh" "-ec") (list $script)) }}
+{{- end }}
 {{- range $name, $svc := $up.services }}
 {{- if eq $svc.kind "job" }}
 {{- $ov := index $root.Values.services $name | default dict }}

@@ -324,6 +324,10 @@ env_extra:
     # Celery prefork concurrency defaults to the CPU count; each fork is a full Django process.
     - {name: WEB_CONCURRENCY, value: '2'}
     - {name: CELERY_MAX_TASKS_PER_CHILD, value: '200'}
+  temporal-django-worker:
+    # The Temporal SDK default is 100 parallel activities. One Replay Vision sweep can start that
+    # many scans, and the worker ran out of its 2Gi at once; raise both together.
+    - {name: MAX_CONCURRENT_ACTIVITIES, value: '10'}
   temporal:
     - {name: SKIP_DB_CREATE, value: '{{ .Values.temporal.skipDbCreate | toString }}', tpl: true}
     - {name: DBNAME, value: '{{ .Values.temporal.database }}', tpl: true}

@@ -395,7 +395,7 @@ PersistentVolumes with the `Retain` policy keep their data on the node until you
 |---|---|
 | `web` and the workers stay in `Init:0/1` | The `migrate` Job is still running (15–25 min on a fresh database) or waits for ClickHouse/PostgreSQL. Follow its logs. |
 | `wait-for-migrations` init container `OOMKilled` | Upstream's Django 6.1 needs more than 1 Gi for `migrate --check`; 0.2.0 sets 2 Gi (`migrations.waitResources`). |
-| Replay Vision, session summaries or video exports never run | Fixed in 0.2.0 (one Temporal worker polls every queue, search attributes registered). Workflows started before the upgrade stay on their old queue: terminate them. |
+| Replay Vision, alerts, subscriptions, session summaries or video exports never run | Fixed in 0.2.0 (one Temporal worker polls every queue, search attributes registered, PostHog's Temporal schedules created). Workflows started before the upgrade stay on their old queue: terminate them. |
 | Exceptions arrive, but no issue appears | `cymbal` cannot reach the bucket; check `cymbal-resolution` logs for `NoSuchBucket`. |
 | The ingest listener answers 404 | By design for anything that is not an SDK path; see `router.ingest.webPaths`. |
 

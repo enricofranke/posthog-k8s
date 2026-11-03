@@ -1530,6 +1530,8 @@ services:
       value: default
     - name: CLICKHOUSE_PASSWORD
       value: ''
+    - name: MAX_CONCURRENT_ACTIVITIES
+      value: '10'
     command:
     - ./bin/temporal-django-worker
     resources:

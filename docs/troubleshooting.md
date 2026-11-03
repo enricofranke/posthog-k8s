@@ -22,8 +22,19 @@ Before 0.2.0 the chart ran one `temporal-django-worker` that polled one task que
 schedules these workflows on per-product queues (`replay-vision-task-queue`,
 `session-replay-task-queue`, `video-export-task-queue`, …). 0.2.0 sets
 `TEMPORAL_USE_SINGLE_TASK_QUEUE=true` on web, worker and temporal-django-worker and registers
-PostHog's custom search attributes (`temporal-search-attributes` hook Job).
+PostHog's custom search attributes (`temporal-search-attributes` hook Job). It also creates PostHog's
+Temporal schedules (`temporal-schedules` hook Job): upstream's `bin/migrate` skips that step on hobby
+deploys, so before 0.2.0 no schedule existed. Without the Replay Vision reconciler, enabled scanners
+never got a sweep schedule, and insight alerts, subscriptions and digests did not run either.
 
+- Check the schedules with `temporal schedule list` (about 130 on a self-hosted instance, among
+  them `replay-vision-scanner-reconciler-schedule`). Missing: look at the `temporal-schedules` Job's
+  logs, or run `python manage.py schedule_temporal_workflows` once in a pod with
+  temporal-django-worker's env. Not inside the running worker, though: a second Django process does
+  not fit its memory limit.
+- The first sweep after enabling a scanner can start a hundred scans at once.
+  `temporal-django-worker` runs at most 10 activities in parallel (`MAX_CONCURRENT_ACTIVITIES`).
+  Raise it only together with the worker's memory limit (`services.temporal-django-worker.{env,resources}`).
 - Workflows started before the upgrade stay on their old queue and never run. Terminate them with
   the Temporal CLI, for example
   `temporal workflow terminate --query 'TaskQueue="replay-vision-task-queue"' --reason "single queue since chart 0.2.0"`

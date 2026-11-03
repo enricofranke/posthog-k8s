@@ -28,6 +28,8 @@ chart data was generated from.
 ### Added
 - `capture-ai` (AI events on `/i/v0/ai` and `/i/v1/ai/events`, now routed on both listeners) and
   `property-defs-ai` services.
+- `temporal-schedules`: a post-install/post-upgrade hook Job that creates PostHog's Temporal
+  schedules (see Fixed). `temporal.schedules.enabled`.
 - `temporal-search-attributes`: a post-install/post-upgrade hook Job that registers PostHog's custom
   Temporal search attributes with upstream's `manage.py register_temporal_search_attributes`. It adds
   only missing attributes, so existing ones are left alone. `temporal.searchAttributes.{enabled,namespace}`.
@@ -49,6 +51,14 @@ chart data was generated from.
   temporal-django-worker polls every workflow.
 - Starting a workflow failed with `Namespace default has no mapping defined for search attribute
   PostHogTeamId`: Temporal with SQL visibility had none of PostHog's custom search attributes.
+- None of PostHog's Temporal schedules existed, so the periodic work never ran: the Replay Vision
+  reconciler (enabled scanners got no sweep schedule and never scanned), insight alerts,
+  subscriptions, error tracking digests. Upstream's `bin/migrate` skips `schedule_temporal_workflows`
+  when `DEPLOYMENT=hobby`, which the hobby env sets. A new `temporal-schedules` hook Job
+  (post-install/post-upgrade, after the search attributes) runs it; `temporal.schedules.enabled`.
+  Cloud-only schedules (usage reports, CRM sync) stay off because `CLOUD_DEPLOYMENT` is unset.
+- temporal-django-worker ran out of memory on the first Replay Vision sweep (the SDK default allows
+  100 parallel activities). It now sets `MAX_CONCURRENT_ACTIVITIES=10`, overridable by name.
 
 - Argo CD: every sync after the first failed on the migrate Job (`Job.batch ... is invalid:
   spec.selector: Required value`): `Replace=true` cannot replace an existing Job, because the API

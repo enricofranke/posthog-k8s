@@ -58,6 +58,12 @@ for attempt in range(1, 61):
         sync_execute("SELECT 1")
         break
     except Exception as error:  # ClickHouse may still be starting (fresh install, version upgrade)
+        # Reachable, but the posthog database does not exist yet: a fresh install, which bin/migrate sets up
+        # from scratch with today's definitions. There is nothing to reset (the e2e on kind waited 10 minutes
+        # for a database that only bin/migrate creates, then failed the Job).
+        if "UnknownDatabase" in error.__class__.__name__ or "UNKNOWN_DATABASE" in str(error):
+            log(f"database {DB} does not exist yet (fresh install), nothing to do")
+            sys.exit(0)
         log(f"ClickHouse not reachable yet ({error.__class__.__name__}), attempt {attempt}/60")
         time.sleep(10)
 else:

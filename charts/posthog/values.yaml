@@ -263,6 +263,12 @@ migrations:
   enabled: true
   backoffLimit: 3
   activeDeadlineSeconds: 3600
+  # -- Resources of the wait-for-migrations init container in web and the workers. It runs
+  # `manage.py migrate --check`, which loads the whole migration graph; since upstream's move to
+  # Django 6.1 (2026-10) that no longer fits in 1Gi.
+  waitResources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 2Gi}
 
 networkPolicy:
   # -- Default-deny ingress for chart pods; allow traffic inside the release and to the router.

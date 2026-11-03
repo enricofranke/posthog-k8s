@@ -340,3 +340,28 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content: {name: CAPTURE_MODE, value: ai}
+
+  - it: gives the wait-for-migrations init container room for the migration graph
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-migrations
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: lets values size the wait-for-migrations init container
+    set:
+      migrations.waitResources:
+        requests: {cpu: 10m, memory: 128Mi}
+        limits: {memory: 3Gi}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: worker
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 3Gi

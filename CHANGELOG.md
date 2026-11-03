@@ -19,6 +19,9 @@ chart data was generated from.
 - temporal-django-worker gets recording-api URL and credentials (recording deletion) and personhog.
 - New Kafka topics `clickhouse_email_status` and `realtime_only_events_json`.
 - The web start script mirrors upstream's optional `POSTHOG_GRANIAN_SHARED_SOCKET` mode.
+- The wait-for-migrations init container of web and the workers gets a 2Gi memory limit (was 1Gi),
+  configurable as `migrations.waitResources`: with upstream on Django 6.1, `manage.py migrate --check`
+  was OOM-killed at 1Gi.
 
 ### Added
 - `capture-ai` (AI events on `/i/v0/ai` and `/i/v1/ai/events`, now routed on both listeners) and

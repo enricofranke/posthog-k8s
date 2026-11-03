@@ -110,7 +110,7 @@ spec:
        still be creating the namespace on a fresh install, hence the retry loop. */}}
 {{- $sa := deepCopy $tdw }}
 {{- $_ := set $sa "envService" "temporal-django-worker" }}
-{{- $_ := set $sa "resources" (dict "requests" (dict "cpu" "50m" "memory" "256Mi") "limits" (dict "memory" "1Gi")) }}
+{{- $_ := set $sa "resources" (dict "requests" (dict "cpu" "50m" "memory" "256Mi") "limits" (dict "memory" "2Gi")) }}
 {{- $script := printf `i=0
 until python manage.py register_temporal_search_attributes --namespace %s; do
   i=$((i+1))

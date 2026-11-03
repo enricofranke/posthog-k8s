@@ -301,8 +301,7 @@ and the workers from crash-looping on a fresh database.
     allowPrivilegeEscalation: false
     capabilities: {drop: [ALL]}
   resources:
-    requests: {cpu: 50m, memory: 256Mi}
-    limits: {memory: 1Gi}
+    {{- toYaml $.Values.migrations.waitResources | nindent 4 }}
   volumeMounts:
     - name: tmp
       mountPath: /tmp

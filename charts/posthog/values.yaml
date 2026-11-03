@@ -129,6 +129,14 @@ temporal:
   visibilityDatabase: temporal_visibility
   # -- Set true when the databases exist already (the PostgreSQL user has no CREATEDB).
   skipDbCreate: false
+  searchAttributes:
+    # -- Register PostHog's custom search attributes (PostHogTeamId, PostHogOrgId, ...) in Temporal after
+    # every install and upgrade. Temporal with SQL visibility starts without them, and workflows that set
+    # them fail to start. Runs upstream's `manage.py register_temporal_search_attributes`, which adds only
+    # the missing ones; the list comes from the pinned PostHog image.
+    enabled: true
+    # -- Temporal namespace the PostHog services use (their TEMPORAL_NAMESPACE, upstream default `default`).
+    namespace: default
 
 # Object storage for exports, symbol sets, AI blobs. S3-compatible.
 objectStorage:

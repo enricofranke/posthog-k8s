@@ -1,0 +1,108 @@
+suite: jobs
+templates:
+  - jobs.yaml
+tests:
+  - it: registers the Temporal search attributes in a post-install/post-upgrade hook
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^posthog/posthog:[0-9a-f]{40}
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/sh", "-ec"]
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'until python manage\.py register_temporal_search_attributes --namespace "default"; do'
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: talks to Temporal with temporal-django-worker's env
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TEMPORAL_HOST
+            value: RELEASE-NAME-posthog-temporal
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: SECRET_KEY
+
+  - it: follows env overrides of temporal-django-worker (e.g. an external Temporal)
+    set:
+      services.temporal-django-worker.env:
+        - {name: TEMPORAL_HOST, value: temporal.example.internal}
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_HOST, value: temporal.example.internal}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_HOST, value: RELEASE-NAME-posthog-temporal}
+
+  - it: uses the configured Temporal namespace
+    set:
+      temporal.searchAttributes.namespace: my-namespace
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--namespace "my-namespace"'
+
+  - it: can be turned off
+    set:
+      temporal.searchAttributes.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-temporal-search-attributes
+          skipEmptyTemplates: true
+
+  - it: is skipped when temporal-django-worker is disabled
+    set:
+      services.temporal-django-worker.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-temporal-search-attributes
+          skipEmptyTemplates: true
+
+  - it: keeps the migrate job on web's env
+    documentSelector:
+      path: metadata.labels["app.kubernetes.io/component"]
+      value: migrate
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["./bin/migrate"]
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: GRANIAN_WORKERS, value: "2"}

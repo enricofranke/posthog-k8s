@@ -1,6 +1,7 @@
 {{- /*
-Jobs: the migrate job (chart-defined, uses the web service's env) plus upstream jobs
-(kafka-init, asyncmigrationscheck). All run as Helm hooks; Argo CD maps them to Sync hooks.
+Jobs: the migrate job (chart-defined, uses the web service's env), the Temporal search-attribute
+registration (chart-defined hook, uses temporal-django-worker's env) plus upstream jobs
+(asyncmigrationscheck). Hooks map to Argo CD PostSync hooks.
 */ -}}
 {{- $up := include "posthog.upstream" . | fromYaml -}}
 {{- $root := . -}}
@@ -9,6 +10,9 @@ Jobs: the migrate job (chart-defined, uses the web service's env) plus upstream 
 {{- $root := index . 0 }}{{ $name := index . 1 }}{{ $svc := index . 2 }}{{ $command := index . 3 }}{{ $args := index . 4 }}
 {{- $ov := index $root.Values.services $name | default dict }}
 {{- $_ := set $svc "overrides" $ov }}
+{{- /* A chart job can borrow another service's env (and that service's env overrides). */}}
+{{- $envName := $svc.envService | default $name }}
+{{- $envOv := index $root.Values.services $envName | default dict }}
   backoffLimit: {{ $root.Values.migrations.backoffLimit }}
   activeDeadlineSeconds: {{ $root.Values.migrations.activeDeadlineSeconds }}
   ttlSecondsAfterFinished: 86400
@@ -41,7 +45,12 @@ Jobs: the migrate job (chart-defined, uses the web service's env) plus upstream 
             {{- end }}
           {{- end }}
           env:
-            {{- include "posthog.env" (list $root $name $svc.env) | nindent 12 }}
+            {{- include "posthog.env" (list $root $envName $svc.env) | nindent 12 }}
+            {{- if ne $envName $name }}
+            {{- with $envOv.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- end }}
             {{- with $ov.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -90,6 +99,40 @@ metadata:
     argocd.argoproj.io/sync-options: Replace=true
 spec:
 {{ include "posthog.jobSpec" (list . "migrate" $migrate (list "./bin/migrate") (list)) }}
+{{- end }}
+{{- $tdw := index $up.services "temporal-django-worker" }}
+{{- $tdwOv := index .Values.services "temporal-django-worker" | default dict }}
+{{- if and .Values.temporal.searchAttributes.enabled $tdw (ternary $tdwOv.enabled true (hasKey $tdwOv "enabled")) }}
+{{- /* PostHog stamps custom search attributes (PostHogTeamId, ...) on workflows. Temporal with SQL
+       visibility starts without them, and a workflow that sets an unknown attribute fails to start.
+       Upstream's management command reads the list from posthog/temporal/common/search_attributes.py
+       in the pinned image and adds only the missing ones, so re-running it is a no-op. Temporal can
+       still be creating the namespace on a fresh install, hence the retry loop. */}}
+{{- $sa := deepCopy $tdw }}
+{{- $_ := set $sa "envService" "temporal-django-worker" }}
+{{- $_ := set $sa "resources" (dict "requests" (dict "cpu" "50m" "memory" "256Mi") "limits" (dict "memory" "1Gi")) }}
+{{- $script := printf `i=0
+until python manage.py register_temporal_search_attributes --namespace %s; do
+  i=$((i+1))
+  [ "$i" -ge 30 ] && { echo "Temporal search attributes not registered after $i attempts"; exit 1; }
+  echo "Temporal not ready (attempt $i), retrying in 10s"
+  sleep 10
+done` (.Values.temporal.searchAttributes.namespace | quote) }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "posthog.serviceName" (list . "temporal-search-attributes") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "posthog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: temporal-search-attributes
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+{{ include "posthog.jobSpec" (list . "temporal-search-attributes" $sa (list "/bin/sh" "-ec") (list $script)) }}
 {{- end }}
 {{- range $name, $svc := $up.services }}
 {{- if eq $svc.kind "job" }}

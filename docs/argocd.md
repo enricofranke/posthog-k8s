@@ -46,7 +46,8 @@ Things to know:
   deterministic values.
 - **Hooks:** `kafka-init` runs as a sidecar, `migrate` is a regular Job with a version-specific
   name (Jobs are immutable) and `argocd.argoproj.io/sync-options: Replace=true`,
-  `asyncmigrationscheck` is a `post-install,post-upgrade` hook that Argo maps to `PostSync`.
+  `asyncmigrationscheck` and `temporal-search-attributes` are `post-install,post-upgrade` hooks that
+  Argo maps to `PostSync`.
 - **Server-side apply** keeps the large ClickHouse ConfigMaps under the annotation size limit.
 - **Health:** `web` and the workers wait for the migrate Job in an init container; the
   Application shows `Progressing` until migrations are through (10–25 minutes on a fresh

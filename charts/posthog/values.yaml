@@ -265,8 +265,9 @@ migrations:
   activeDeadlineSeconds: 3600
   # -- Before `bin/migrate`, rebuild an empty `raw_sessions_v3` that still has the pre-2026-10-28 shape
   # (uniqExact). ClickHouse migration 0364 would otherwise attach views that cannot write to it, and
-  # inserts into sharded_events would fail. Only the v3 migration records are reset, so the migrations
-  # recreate the tables; a v3 table that holds rows stops the Job with the manual steps instead.
+  # inserts into sharded_events would fail. The empty v3 tables and views are dropped and their migration
+  # records reset, so the migrations recreate them; a v3 table that holds rows stops the Job with the
+  # manual steps instead.
   sessionsV3Reset: true
   # -- Resources of the wait-for-migrations init container in web and the workers. It runs
   # `manage.py migrate --check`, which loads the whole migration graph; since upstream's move to

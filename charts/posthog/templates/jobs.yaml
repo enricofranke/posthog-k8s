@@ -15,7 +15,11 @@ registration (chart-defined hook, uses temporal-django-worker's env) plus upstre
 {{- $envOv := index $root.Values.services $envName | default dict }}
   backoffLimit: {{ $root.Values.migrations.backoffLimit }}
   activeDeadlineSeconds: {{ $root.Values.migrations.activeDeadlineSeconds }}
+  {{- /* Not on migrate: Argo CD recreates a regular Job that the TTL controller deleted, so the
+         migrations ran again every day. Hooks are replaced on every run anyway. */}}
+  {{- if ne $name "migrate" }}
   ttlSecondsAfterFinished: 86400
+  {{- end }}
   template:
     metadata:
       labels:
@@ -83,9 +87,18 @@ registration (chart-defined hook, uses temporal-django-worker's env) plus upstre
 {{- if .Values.migrations.enabled }}
 {{- $migrate := deepCopy $web }}
 {{- /* Not a hook: on a fresh install the datastores only exist once the release is applied, and
-       web/worker wait for this Job through their init container. A new Job per image+chart
-       version keeps upgrades working (Job specs are immutable). */}}
-{{- $rev := printf "%s-%s" (include "posthog.image" (list . "posthog")) .Chart.Version | sha256sum | trunc 8 }}
+       web/worker wait for this Job through their init container. Job specs are immutable, so the
+       name carries a hash of the rendered spec (image, env, script, resources): any change makes a
+       new Job, the same spec keeps the finished one and a sync re-applies it unchanged. */}}
+{{- $spec := "" }}
+{{- if .Values.migrations.sessionsV3Reset }}
+{{- /* Installs from before 2026-10-28 carry an empty raw_sessions_v3 in the old shape; see the script. */}}
+{{- $script := printf "python - <<'PY'\n%s\nPY\nexec ./bin/migrate" (.Files.Get "files/migrate/sessions_v3_reset.py" | trim) }}
+{{- $spec = include "posthog.jobSpec" (list . "migrate" $migrate (list "/bin/sh" "-ec") (list $script)) }}
+{{- else }}
+{{- $spec = include "posthog.jobSpec" (list . "migrate" $migrate (list "./bin/migrate") (list)) }}
+{{- end }}
+{{- $rev := printf "%s-%s" .Chart.Version $spec | sha256sum | trunc 8 }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -96,15 +109,11 @@ metadata:
     {{- include "posthog.labels" . | nindent 4 }}
     app.kubernetes.io/component: migrate
   annotations:
-    argocd.argoproj.io/sync-options: Replace=true
+    {{- /* Once a newer spec replaces it, the finished Job is left for pruning without keeping
+           the Application OutOfSync. */}}
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
-{{- if .Values.migrations.sessionsV3Reset }}
-{{- /* Installs from before 2026-10-28 carry an empty raw_sessions_v3 in the old shape; see the script. */}}
-{{- $script := printf "python - <<'PY'\n%s\nPY\nexec ./bin/migrate" (.Files.Get "files/migrate/sessions_v3_reset.py" | trim) }}
-{{ include "posthog.jobSpec" (list . "migrate" $migrate (list "/bin/sh" "-ec") (list $script)) }}
-{{- else }}
-{{ include "posthog.jobSpec" (list . "migrate" $migrate (list "./bin/migrate") (list)) }}
-{{- end }}
+{{ $spec }}
 {{- end }}
 {{- $tdw := index $up.services "temporal-django-worker" }}
 {{- $tdwOv := index .Values.services "temporal-django-worker" | default dict }}

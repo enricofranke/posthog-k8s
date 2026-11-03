@@ -48,7 +48,18 @@ chart data was generated from.
 - Starting a workflow failed with `Namespace default has no mapping defined for search attribute
   PostHogTeamId`: Temporal with SQL visibility had none of PostHog's custom search attributes.
 
+- Argo CD: every sync after the first failed on the migrate Job (`Job.batch ... is invalid:
+  spec.selector: Required value`): `Replace=true` cannot replace an existing Job, because the API
+  server defaults the selector only on create. The Job name now carries a hash of its rendered spec
+  and the annotation is gone, so a sync re-applies the finished Job unchanged.
+- Argo CD ran the migrations again every day: the TTL controller deleted the finished migrate Job
+  after 24 hours and self-heal recreated it. The migrate Job has no `ttlSecondsAfterFinished` any
+  more; superseded ones carry `argocd.argoproj.io/compare-options: IgnoreExtraneous`.
+
 ### Upgrade notes
+- Argo CD: after the upgrade, delete the old `posthog-migrate-*` Job (it predates
+  `IgnoreExtraneous` and shows as requiring pruning). If a sync is stuck retrying the old Job's
+  `Replace`, terminate the operation first.
 - PostgreSQL 15 or newer is required: upstream moved to Django 6.1, and `posthog/settings/service_requirements.py`
   now asks for `>=15.0.0`. The bundled image is 15.12; check `SELECT version()` on an external server
   before upgrading.

@@ -137,3 +137,28 @@ tests:
           value: ["./bin/migrate"]
       - notExists:
           path: spec.template.spec.containers[0].args
+
+  - it: keeps the finished migrate Job for Argo CD instead of replacing it on every sync
+    documentSelector:
+      path: metadata.labels["app.kubernetes.io/component"]
+      value: migrate
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^RELEASE-NAME-posthog-migrate-[0-9a-f]{8}$
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/compare-options"]
+          value: IgnoreExtraneous
+      - notExists:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+      - notExists:
+          path: spec.ttlSecondsAfterFinished
+
+  - it: still expires the hook Jobs after a day
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 86400

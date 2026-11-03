@@ -98,7 +98,13 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-options: Replace=true
 spec:
+{{- if .Values.migrations.sessionsV3Reset }}
+{{- /* Installs from before 2026-10-28 carry an empty raw_sessions_v3 in the old shape; see the script. */}}
+{{- $script := printf "python - <<'PY'\n%s\nPY\nexec ./bin/migrate" (.Files.Get "files/migrate/sessions_v3_reset.py" | trim) }}
+{{ include "posthog.jobSpec" (list . "migrate" $migrate (list "/bin/sh" "-ec") (list $script)) }}
+{{- else }}
 {{ include "posthog.jobSpec" (list . "migrate" $migrate (list "./bin/migrate") (list)) }}
+{{- end }}
 {{- end }}
 {{- $tdw := index $up.services "temporal-django-worker" }}
 {{- $tdwOv := index .Values.services "temporal-django-worker" | default dict }}

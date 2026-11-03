@@ -33,6 +33,10 @@ chart data was generated from.
   (Django -> recording-api) and `CLICKHOUSE_SIGNALS_PASSWORD` (new read-only ClickHouse user
   `signals`). Values: `posthog.secrets.internalRequestToken`, `posthog.secrets.recordingApiJwtSecret`,
   `clickhouse.users.signals`.
+- `migrations.sessionsV3Reset` (default on): before `bin/migrate`, the migrate Job rebuilds an empty
+  `raw_sessions_v3` that still has the old shape, by resetting only the v3 migration records so the
+  migrations recreate the tables with today's definitions. A v3 table that holds rows stops the Job
+  with the manual steps. Dry run: `SESSIONS_V3_RESET_DRY_RUN=1`.
 
 ### Fixed
 - Temporal workflows on any task queue other than the default never ran (Replay Vision, session
@@ -47,10 +51,13 @@ chart data was generated from.
   now asks for `>=15.0.0`. The bundled image is 15.12; check `SELECT version()` on an external server
   before upgrading.
 - ClickHouse migration `0364_sessions_v3_more_ad_ids` creates the `raw_sessions_v3` materialized views
-  again with the new table shape (`uniq` states instead of `uniqExact`). An install whose
-  `sharded_raw_sessions_v3` still has the old shape keeps it, and the new views then feed it. Check
-  `SHOW CREATE TABLE sharded_raw_sessions_v3` first. If it still says `uniqExact`, follow the comment
-  in that migration: drop the six v3 objects and recreate them from `sessions_v3.py`.
+  again with the new table shape (`uniq` states instead of `uniqExact`), and its `IF NOT EXISTS` keeps an
+  existing table. Every install from before 2026-10-28 has that table in the old shape (empty, because
+  migration 0178 had dropped its views), and views that cannot write to it would make every insert into
+  `sharded_events` fail. The migrate Job handles this on its own (`migrations.sessionsV3Reset`, see
+  Added). Its log line starting `sessions-v3 reset:` says what it did. If your v3 table holds rows,
+  the Job stops and prints the manual steps instead. Check beforehand with
+  `SELECT count() FROM sharded_raw_sessions_v3` and `SHOW CREATE TABLE sharded_raw_sessions_v3`.
 - `posthog.existingSecret` / `secrets.keys` (Argo CD): add `INTERNAL_REQUEST_TOKEN` and
   `RECORDING_API_JWT_SECRET` to the app Secret. Both references are optional, so pods start without
   them, but flag test evaluation in the UI fails and recording-api keeps accepting the shared

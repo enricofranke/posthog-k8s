@@ -11,12 +11,12 @@ and their organization memberships should follow the groups the proxy asserts:
 
 ```
 X-Forwarded-User:   jane@example.com
-X-Forwarded-Groups: netcup-admins,zundertrack-developers
+X-Forwarded-Groups: platform-admins,acme-developers
 ```
 
 - unknown user → created on first request
-- `netcup-admins` → admin in every organization
-- `zundertrack-developers` → member of organization "Zundertrack"
+- `platform-admins` → admin in every organization
+- `acme-developers` → member of organization "Acme"
 - group disappears → membership removed on next request (offboarding follows the proxy)
 
 ## Why an overlay image

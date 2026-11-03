@@ -389,3 +389,12 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content: {name: MAX_CONCURRENT_ACTIVITIES, value: "10"}
+
+  - it: enables object storage on temporal-django-worker (Replay Vision reads the rendered videos there)
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: OBJECT_STORAGE_ENABLED, value: "true"}

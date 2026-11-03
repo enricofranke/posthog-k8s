@@ -1536,6 +1536,8 @@ services:
       value: ''
     - name: MAX_CONCURRENT_ACTIVITIES
       value: '10'
+    - name: OBJECT_STORAGE_ENABLED
+      value: 'true'
     command:
     - ./bin/temporal-django-worker
     resources:

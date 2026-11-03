@@ -334,6 +334,9 @@ env_extra:
     # The Temporal SDK default is 100 parallel activities. One Replay Vision sweep can start that
     # many scans, and the worker ran out of its 2Gi at once; raise both together.
     - {name: MAX_CONCURRENT_ACTIVITIES, value: '10'}
+    # Hobby sets OBJECT_STORAGE_ENABLED only on web and worker; PostHog defaults it to false, and
+    # Replay Vision's upload activity then reads every rendered video as empty bytes.
+    - {name: OBJECT_STORAGE_ENABLED, value: 'true'}
   temporal:
     - {name: SKIP_DB_CREATE, value: '{{ .Values.temporal.skipDbCreate | toString }}', tpl: true}
     - {name: DBNAME, value: '{{ .Values.temporal.database }}', tpl: true}

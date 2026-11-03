@@ -65,6 +65,9 @@ chart data was generated from.
   when `DEPLOYMENT=hobby`, which the hobby env sets. A new `temporal-schedules` hook Job
   (post-install/post-upgrade, after the search attributes) runs it; `temporal.schedules.enabled`.
   Cloud-only schedules (usage reports, CRM sync) stay off because `CLOUD_DEPLOYMENT` is unset.
+- Replay Vision failed every scan with `ExportedAsset ... produced empty video bytes`:
+  temporal-django-worker had no `OBJECT_STORAGE_ENABLED` (hobby sets it on web and worker only,
+  PostHog defaults to false), so it read the rendered videos through the disabled-storage stub.
 - temporal-django-worker ran out of memory on the first Replay Vision sweep (the SDK default allows
   100 parallel activities). It now sets `MAX_CONCURRENT_ACTIVITIES=10`, overridable by name.
 

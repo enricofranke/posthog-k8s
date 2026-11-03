@@ -10,6 +10,31 @@ database takes 10–25 minutes; a [schema seed](../README.md#fast-first-start-sc
 that down to seconds. If the Job itself is not running, check that ClickHouse and PostgreSQL are
 ready: it needs both.
 
+## `wait-for-migrations` init container OOMKilled
+
+Since upstream's move to Django 6.1 (2026-10), `manage.py migrate --check` loads a migration graph
+that no longer fits in 1 Gi. Chart 0.2.0 gives the init container a 2 Gi limit; raise it further
+with `migrations.waitResources` if a later upstream needs more.
+
+## Replay Vision, session summaries or video exports never run
+
+Before 0.2.0 the chart ran one `temporal-django-worker` that polled one task queue, while PostHog
+schedules these workflows on per-product queues (`replay-vision-task-queue`,
+`session-replay-task-queue`, `video-export-task-queue`, …). 0.2.0 sets
+`TEMPORAL_USE_SINGLE_TASK_QUEUE=true` on web, worker and temporal-django-worker and registers
+PostHog's custom search attributes (`temporal-search-attributes` hook Job).
+
+- Workflows started before the upgrade stay on their old queue and never run. Terminate them with
+  the Temporal CLI, for example
+  `temporal workflow terminate --query 'TaskQueue="replay-vision-task-queue"' --reason "single queue since chart 0.2.0"`
+  (run it where the CLI reaches `<release>-temporal:7233`).
+- `Namespace default has no mapping defined for search attribute PostHogTeamId`: the hook Job did
+  not run. Check `temporal.searchAttributes.enabled` and the Job's logs.
+- Replay Vision only analyses with Gemini: set `REPLAY_VISION_GEMINI_API_KEY` (falls back to
+  `GEMINI_API_KEY`) on web, worker and temporal-django-worker via `services.<name>.env`, from a
+  Secret. Self-hosted organizations are capped by `REPLAY_VISION_MONTHLY_CREDIT_QUOTA`, which
+  defaults to the free plan's allocation (2,500 credits per month at the time of writing).
+
 ## `web` OOMKilled
 
 Each granian worker is a full Django process (~700 MB). Defaults: `GRANIAN_WORKERS=2` with a 4 Gi

@@ -22,6 +22,8 @@ chart data was generated from.
 - The wait-for-migrations init container of web and the workers gets a 2Gi memory limit (was 1Gi),
   configurable as `migrations.waitResources`: with upstream on Django 6.1, `manage.py migrate --check`
   was OOM-killed at 1Gi.
+- The `asyncmigrationscheck` hook gets 2Gi (was 1Gi) for the same reason: `run_async_migrations
+  --check` was OOM-killed, and the Argo CD sync waited on the hook.
 
 ### Added
 - `capture-ai` (AI events on `/i/v0/ai` and `/i/v1/ai/events`, now routed on both listeners) and

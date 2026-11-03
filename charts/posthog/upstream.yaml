@@ -198,12 +198,12 @@ services:
     - manage.py
     - run_async_migrations
     - --check
-    resources: &id001
+    resources:
       requests:
         cpu: 50m
-        memory: 256Mi
+        memory: 512Mi
       limits:
-        memory: 1Gi
+        memory: 2Gi
     securityContext: &id002
       runAsUser: 10001
       runAsGroup: 10001
@@ -273,7 +273,12 @@ services:
       httpGet:
         path: /_readiness
         port: http
-    resources: *id001
+    resources: &id001
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
     securityContext:
       runAsUser: 65534
       runAsGroup: 65534

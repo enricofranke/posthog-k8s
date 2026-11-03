@@ -141,6 +141,9 @@ resources:
   temporal: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1Gi}}
   browserless: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 2Gi}}
   cymbal: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 1Gi}}
+  # `run_async_migrations --check` loads Django; since upstream's move to Django 6.1 (2026-10) it was
+  # OOM-killed at 1Gi, like the wait-for-migrations init container (migrations.waitResources).
+  asyncmigrationscheck: {requests: {cpu: 50m, memory: 512Mi}, limits: {memory: 2Gi}}
 
 # Pod security: which user each image runs as. `root` marks images that need uid 0
 # (documented in the chart README); everything else runs non-root with all capabilities dropped.

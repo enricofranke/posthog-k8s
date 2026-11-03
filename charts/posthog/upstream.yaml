@@ -79,6 +79,10 @@ images:
     repository: ghcr.io/posthog/posthog/property-defs-rs
     tag: master
     digest: sha256:fa6436baf17eb57554691eec94aa9d52b3bf3897b670ae472d008675719cc200
+  recording-rasterizer:
+    repository: ghcr.io/posthog/posthog-recording-rasterizer
+    tag: master
+    digest: sha256:77f879164ca4161975827fbd736b17f15c51efd74c203d1941438081acfe7bd8
   redis7:
     repository: redis
     tag: 7.2-alpine

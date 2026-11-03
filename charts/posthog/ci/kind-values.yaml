@@ -13,6 +13,13 @@ posthog:
     internalRequestToken: ci-internal-request-token
     recordingApiJwtSecret: ci-recording-api-jwt-secret
 
+rasterizer:
+  maxConcurrentActivities: 1
+  seccompProfile: {type: Localhost, localhostProfile: profiles/chrome-sandbox.json}  # copied in by ci.yml
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1536Mi}
+
 router:
   replicas: 1
   podDisruptionBudget:

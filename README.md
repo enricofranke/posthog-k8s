@@ -373,6 +373,9 @@ drill, a ClickHouse backup job, bucket versioning, alerts, 2FA for admins.
 >   `SELECT count() FROM sharded_raw_sessions_v3`.
 > - Check the `$ai_*` topic change on capture, and terminate Temporal workflows that were started on
 >   the per-product queues before the upgrade.
+> - Replay Vision and video exports need the new recording rasterizer, and it needs a seccomp
+>   profile on the nodes ([docs/rasterizer.md](docs/rasterizer.md)); without it the pod restarts
+>   with `No usable sandbox!`.
 > - Argo CD: once the new `migrate` Job is through, delete the old `<release>-migrate-*` Job. It
 >   predates 0.2.0's `IgnoreExtraneous` and otherwise keeps the Application OutOfSync. A sync stuck
 >   retrying it (`spec.selector: Required value`) needs its operation terminated first.
@@ -395,7 +398,7 @@ PersistentVolumes with the `Retain` policy keep their data on the node until you
 |---|---|
 | `web` and the workers stay in `Init:0/1` | The `migrate` Job is still running (15–25 min on a fresh database) or waits for ClickHouse/PostgreSQL. Follow its logs. |
 | `wait-for-migrations` init container `OOMKilled` | Upstream's Django 6.1 needs more than 1 Gi for `migrate --check`; 0.2.0 sets 2 Gi (`migrations.waitResources`). |
-| Replay Vision, alerts, subscriptions, session summaries or video exports never run | Fixed in 0.2.0 (one Temporal worker polls every queue, search attributes registered, PostHog's Temporal schedules created). Workflows started before the upgrade stay on their old queue: terminate them. |
+| Replay Vision, alerts, subscriptions, session summaries or video exports never run | Fixed in 0.2.0 (one Temporal worker polls every queue, search attributes registered, PostHog's Temporal schedules created, recording rasterizer added). Workflows started before the upgrade stay on their old queue: terminate them. The rasterizer needs a seccomp profile: [docs/rasterizer.md](docs/rasterizer.md). |
 | Exceptions arrive, but no issue appears | `cymbal` cannot reach the bucket; check `cymbal-resolution` logs for `NoSuchBucket`. |
 | The ingest listener answers 404 | By design for anything that is not an SDK path; see `router.ingest.webPaths`. |
 
@@ -458,6 +461,7 @@ default 2) via `services.<name>.env`.
 | **Backups** | PostgreSQL holds everything you cannot lose (users, dashboards, flags, issues) plus `ENCRYPTION_SALT_KEYS` from the env secret. ClickHouse: `BACKUP DATABASE posthog TO File('/var/lib/clickhouse/backups/<name>')` (the chart allows that path). Object storage: bucket versioning. |
 | **Monitoring** | `metrics.serviceMonitor.enabled` renders ServiceMonitors for services that expose Prometheus metrics. |
 | **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md): why a pod waits, where the migrate job logs, what the compat aliases are for. |
+| **Replay Vision** | [docs/rasterizer.md](docs/rasterizer.md): the recording rasterizer, its seccomp profile and egress. Needs a Gemini key (`REPLAY_VISION_GEMINI_API_KEY`). |
 
 </details>
 

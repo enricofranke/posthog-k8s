@@ -31,6 +31,12 @@ upstream:
     - posthog/user_scripts
     - share
 
+# Images of chart-native services that the compose files do not define, pinned like the others.
+extra_images:
+  # Session replay rasterizer (templates/rasterizer.yaml). Upstream builds it only when its code
+  # changes, so there is no tag per PostHog commit; `master` is pinned by digest at sync time.
+  recording-rasterizer: {repository: ghcr.io/posthog/posthog-recording-rasterizer, tag: master}
+
 # Compose services that the chart does not render, with the reason (goes into upstream.yaml).
 excluded:
   db: bundled PostgreSQL is rendered from the chart's own template (or an external database is used)

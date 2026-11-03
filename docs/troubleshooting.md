@@ -32,6 +32,10 @@ never got a sweep schedule, and insight alerts, subscriptions and digests did no
   logs, or run `python manage.py schedule_temporal_workflows` once in a pod with
   temporal-django-worker's env. Not inside the running worker, though: a second Django process does
   not fit its memory limit.
+- Scans stay "Running" and their child workflow `rasterize-recording` waits on
+  `rasterization-task-queue`: the recording rasterizer is missing or crash-looping. See
+  [rasterizer.md](rasterizer.md); `No usable sandbox!` in its log means the seccomp profile is
+  missing.
 - The first sweep after enabling a scanner can start a hundred scans at once.
   `temporal-django-worker` runs at most 10 activities in parallel (`MAX_CONCURRENT_ACTIVITIES`).
   Raise it only together with the worker's memory limit (`services.temporal-django-worker.{env,resources}`).

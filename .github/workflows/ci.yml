@@ -61,6 +61,13 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
+      - name: Seccomp profile for the recording rasterizer (Chromium's sandbox)
+        run: |
+          # Ubuntu 24.04 runners block unprivileged user namespaces through AppArmor; Chromium's
+          # namespace sandbox needs them (docs/rasterizer.md).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          docker exec posthog-control-plane mkdir -p /var/lib/kubelet/seccomp/profiles
+          docker cp docs/seccomp/chrome-sandbox.json posthog-control-plane:/var/lib/kubelet/seccomp/profiles/chrome-sandbox.json
       - name: Restore schema seed for this upstream commit
         id: seed
         uses: actions/cache/restore@v4

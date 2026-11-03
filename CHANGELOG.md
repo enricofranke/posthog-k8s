@@ -28,6 +28,14 @@ chart data was generated from.
 ### Added
 - `capture-ai` (AI events on `/i/v0/ai` and `/i/v1/ai/events`, now routed on both listeners) and
   `property-defs-ai` services.
+- `recording-rasterizer` (`rasterizer.*`): upstream's Node.js worker that renders recordings to
+  video in chrome-headless-shell, for Replay Vision scans and replay video exports. They wait on
+  `rasterization-task-queue`, which the single-queue setting does not collapse, and upstream's
+  hobby compose has no such worker. Chromium's sandbox needs a Localhost seccomp profile
+  (`docs/seccomp/chrome-sandbox.json`, `rasterizer.seccompProfile`); with `networkPolicy.enabled`
+  an egress policy keeps the browser off private addresses. See docs/rasterizer.md.
+- Generator: `extra_images` in rules.yaml for images of chart-native services, pinned like the
+  compose images.
 - `temporal-schedules`: a post-install/post-upgrade hook Job that creates PostHog's Temporal
   schedules (see Fixed). `temporal.schedules.enabled`.
 - `temporal-search-attributes`: a post-install/post-upgrade hook Job that registers PostHog's custom
@@ -69,6 +77,10 @@ chart data was generated from.
   more; superseded ones carry `argocd.argoproj.io/compare-options: IgnoreExtraneous`.
 
 ### Upgrade notes
+- Replay Vision and replay video exports need the new `recording-rasterizer`, and it needs a
+  seccomp profile on the nodes: install `docs/seccomp/chrome-sandbox.json` and set
+  `rasterizer.seccompProfile` (docs/rasterizer.md). Until then the pod logs
+  `No usable sandbox!` and restarts; `rasterizer.enabled: false` turns it off.
 - Argo CD: after the upgrade, delete the old `posthog-migrate-*` Job (it predates
   `IgnoreExtraneous` and shows as requiring pruning). If a sync is stuck retrying the old Job's
   `Replace`, terminate the operation first.

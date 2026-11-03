@@ -210,6 +210,44 @@ router:
 
 # Trusted-header login: log users in from headers set by an authenticating proxy (Teleport,
 # oauth2-proxy, Authelia, Pomerium). Requires the auth overlay image, see docs/auth-proxy.md.
+rasterizer:
+  # -- Session replay rasterizer (upstream's Node.js worker with chrome-headless-shell). It renders
+  # recordings to video for Replay Vision scans and replay video exports, which wait on Temporal's
+  # `rasterization-task-queue` until it runs. Needs temporal-django-worker.
+  enabled: true
+  replicas: 1
+  # -- Parallel renders per pod. Each one holds a Chromium (~300-800 MB); the worker takes fewer
+  # above 70 % of the memory limit.
+  maxConcurrentActivities: 2
+  # -- Seconds a stopping pod lets running renders finish; the rest are retried elsewhere.
+  shutdownGraceSeconds: 120
+  # -- Egress proxy for Chromium and the S3 client (e.g. `http://smokescreen:4750`). Recordings are
+  # untrusted content. Empty: direct egress (`RASTERIZER_USE_PROXY=false`); with
+  # `networkPolicy.enabled` the pod then reaches only Temporal, recording-api, DNS and public
+  # addresses on ports 80/443.
+  egressProxy: ""
+  # -- Pod seccomp profile. Chromium's sandbox needs a profile that allows clone, unshare and
+  # chroot; RuntimeDefault does not, and the pod then fails with "No usable sandbox!". Install
+  # docs/seccomp/chrome-sandbox.json on the nodes and use
+  # `{type: Localhost, localhostProfile: profiles/chrome-sandbox.json}` (see docs/rasterizer.md).
+  seccompProfile: {type: RuntimeDefault}
+  # -- Keep Chromium's sandbox. `false` starts it with --no-sandbox: a renderer exploit in a
+  # crafted recording (anyone with the project token can send one) then runs as the worker, which
+  # holds SECRET_KEY and the object storage keys. Only for clusters that cannot load the profile.
+  chromeSandbox: true
+  nodeSelector: {}
+  resources:
+    requests: {cpu: 250m, memory: 768Mi}
+    limits: {memory: 3Gi}
+  priorityClassName: ""
+  # -- Extra env, e.g. `SCREENSHOT_JPEG_QUALITY` or `MAX_IDLE_BROWSERS`.
+  env: []
+  networkPolicy:
+    # -- Address ranges the browser may not reach on 80/443 (private, CGNAT, link-local, loopback).
+    blockedCidrs: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+    # -- Additional egress rules, e.g. an in-cluster S3 such as MinIO.
+    extraEgress: []
+
 authProxy:
   enabled: false
   userHeader: X-Forwarded-User

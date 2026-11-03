@@ -1,0 +1,174 @@
+suite: rasterizer
+templates:
+  - rasterizer.yaml
+tests:
+  - it: runs upstream's rasterizer image on the rasterization queue's Temporal
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-recording-rasterizer
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^ghcr\.io/posthog/posthog-recording-rasterizer:master@sha256:[0-9a-f]{64}$
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_HOST, value: RELEASE-NAME-posthog-temporal}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: RECORDING_API_BASE_URL, value: "http://RELEASE-NAME-posthog-recording-api:6738"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_KEY
+            valueFrom:
+              secretKeyRef: {name: RELEASE-NAME-posthog-env, key: SECRET_KEY}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "2"}
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /_ready
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: says explicitly that there is no egress proxy, and uses one when configured
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: RASTERIZER_USE_PROXY, value: "false"}
+
+  - it: routes through the configured egress proxy
+    set:
+      rasterizer.egressProxy: http://smokescreen:4750
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: HTTPS_PROXY, value: "http://smokescreen:4750"}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: RASTERIZER_USE_PROXY, value: "false"}
+
+  - it: points the S3 client at path-style storage, but leaves AWS on its regional endpoint
+    set:
+      objectStorage.bundled.enabled: false
+      objectStorage.forcePathStyle: false
+      objectStorage.endpoint: https://s3.eu-central-1.amazonaws.com
+      objectStorage.region: eu-central-1
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: VIDEO_EXPORT_OBJECT_STORAGE_REGION, value: eu-central-1}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: VIDEO_EXPORT_OBJECT_STORAGE_ENDPOINT, value: "https://s3.eu-central-1.amazonaws.com"}
+
+  - it: uses the bundled SeaweedFS endpoint by default
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: VIDEO_EXPORT_OBJECT_STORAGE_ENDPOINT, value: "http://RELEASE-NAME-posthog-seaweedfs:8333"}
+
+  - it: takes a Localhost seccomp profile for Chromium's sandbox
+    set:
+      rasterizer.seccompProfile: {type: Localhost, localhostProfile: profiles/chrome-sandbox.json}
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile
+          value: {type: Localhost, localhostProfile: profiles/chrome-sandbox.json}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: PUPPETEER_EXECUTABLE_PATH, value: /chart/rasterizer/chrome-no-sandbox}
+
+  - it: starts Chromium with --no-sandbox only when asked to
+    set:
+      rasterizer.chromeSandbox: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: PUPPETEER_EXECUTABLE_PATH, value: /chart/rasterizer/chrome-no-sandbox}
+        documentSelector:
+          path: kind
+          value: Deployment
+      - matchRegex:
+          path: data["chrome-no-sandbox"]
+          pattern: 'exec /usr/local/bin/chrome-headless-shell --no-sandbox "\$@"'
+        documentSelector:
+          path: kind
+          value: ConfigMap
+
+  - it: limits the browser's egress when network policies are on
+    set:
+      networkPolicy.enabled: true
+    documentSelector:
+      path: kind
+      value: NetworkPolicy
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value: [Egress]
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: posthog
+                    app.kubernetes.io/instance: RELEASE-NAME
+                    app.kubernetes.io/component: temporal
+            ports:
+              - port: 7233
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+            ports:
+              - port: 80
+              - port: 443
+
+  - it: has no egress policy without network policies
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: kind
+          value: NetworkPolicy
+          skipEmptyTemplates: true
+
+  - it: can be turned off
+    set:
+      rasterizer.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: is skipped without temporal-django-worker
+    set:
+      services.temporal-django-worker.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

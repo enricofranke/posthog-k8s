@@ -186,6 +186,19 @@ def test_build_end_to_end_on_a_miniature_compose():
     assert files == {}
 
 
+def test_extra_images_are_added_for_chart_native_services():
+    """templates/rasterizer.yaml uses an image the compose files do not define; it is pinned
+    like the compose images, and a clash with a compose image is a problem, not an override."""
+    src = FakeSource({"docker-compose.base.yml": MINI_BASE, "docker-compose.hobby.yml": MINI_HOBBY, ".env.services": "REDIS_URL=redis://redis7:6379/\n"})
+    rules = mini_rules()
+    rules["extra_images"] = {"recording-rasterizer": {"repository": "ghcr.io/posthog/posthog-recording-rasterizer", "tag": "master"}}
+    data, _ = su.build(rules, src, want_digests=False)
+    assert data["images"]["recording-rasterizer"] == {"repository": "ghcr.io/posthog/posthog-recording-rasterizer", "tag": "master"}
+    rules["extra_images"] = {"capture": {"repository": "example/capture", "tag": "1"}}
+    with pytest.raises(su.SyncError, match="extra_images: capture"):
+        su.build(rules, src, want_digests=False)
+
+
 def test_build_fails_loudly_on_a_new_upstream_service():
     hobby = MINI_HOBBY + "  brand-new-thing:\n    image: example/new:1\n"
     src = FakeSource({"docker-compose.base.yml": MINI_BASE, "docker-compose.hobby.yml": hobby, ".env.services": ""})

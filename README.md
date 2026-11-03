@@ -177,7 +177,7 @@ migrations: 15–25 minutes on a laptop. `web` and the workers sit in `Init:0/1`
 
 ```bash
 kubectl -n posthog get pods -w
-kubectl -n posthog logs -f job/$(kubectl -n posthog get jobs -o name | grep migrate | cut -d/ -f2)
+kubectl -n posthog logs -f $(kubectl -n posthog get jobs -l app.kubernetes.io/component=migrate --sort-by=.metadata.creationTimestamp -o name | tail -1)
 ```
 
 **1.4 Open it.** Forward both router listeners and continue with [step 3](#3-first-login-and-a-test-event):
@@ -373,6 +373,9 @@ drill, a ClickHouse backup job, bucket versioning, alerts, 2FA for admins.
 >   `SELECT count() FROM sharded_raw_sessions_v3`.
 > - Check the `$ai_*` topic change on capture, and terminate Temporal workflows that were started on
 >   the per-product queues before the upgrade.
+> - Argo CD: once the new `migrate` Job is through, delete the old `<release>-migrate-*` Job. It
+>   predates 0.2.0's `IgnoreExtraneous` and otherwise keeps the Application OutOfSync. A sync stuck
+>   retrying it (`spec.selector: Required value`) needs its operation terminated first.
 
 ### 5. Uninstalling
 

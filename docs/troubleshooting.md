@@ -85,7 +85,7 @@ reporting ready, external S3 must have it created.
 ```bash
 kubectl -n posthog get pods
 kubectl -n posthog logs deploy/posthog-web -c web --tail=100
-kubectl -n posthog logs job/$(kubectl -n posthog get jobs -o name | grep migrate | cut -d/ -f2) --tail=50
+kubectl -n posthog logs $(kubectl -n posthog get jobs -l app.kubernetes.io/component=migrate --sort-by=.metadata.creationTimestamp -o name | tail -1) --tail=50
 kubectl -n posthog exec posthog-clickhouse-0 -c clickhouse -- clickhouse-client -q "SELECT event, count() FROM posthog.events GROUP BY event"
 ```
 

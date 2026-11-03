@@ -40,6 +40,14 @@ chart data was generated from.
   PostHogTeamId`: Temporal with SQL visibility had none of PostHog's custom search attributes.
 
 ### Upgrade notes
+- PostgreSQL 15 or newer is required: upstream moved to Django 6.1, and `posthog/settings/service_requirements.py`
+  now asks for `>=15.0.0`. The bundled image is 15.12; check `SELECT version()` on an external server
+  before upgrading.
+- ClickHouse migration `0364_sessions_v3_more_ad_ids` creates the `raw_sessions_v3` materialized views
+  again with the new table shape (`uniq` states instead of `uniqExact`). An install whose
+  `sharded_raw_sessions_v3` still has the old shape keeps it, and the new views then feed it. Check
+  `SHOW CREATE TABLE sharded_raw_sessions_v3` first. If it still says `uniqExact`, follow the comment
+  in that migration: drop the six v3 objects and recreate them from `sessions_v3.py`.
 - `posthog.existingSecret` / `secrets.keys` (Argo CD): add `INTERNAL_REQUEST_TOKEN` and
   `RECORDING_API_JWT_SECRET` to the app Secret. Both references are optional, so pods start without
   them, but flag test evaluation in the UI fails and recording-api keeps accepting the shared

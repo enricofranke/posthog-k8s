@@ -191,7 +191,7 @@ authProxy:
   enabled: false
   userHeader: X-Forwarded-User
   groupsHeader: X-Forwarded-Groups
-  # -- Group -> organization membership mapping, e.g. {netcup-admins: {organizations: ["*"], level: admin}}
+  # -- Group -> organization membership mapping, e.g. {platform-admins: {organizations: ["*"], level: admin}}
   groups: {}
 
 # Per-service overrides keyed by upstream service name (see upstream.yaml). Every service accepts:

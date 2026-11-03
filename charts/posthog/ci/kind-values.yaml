@@ -10,6 +10,15 @@ posthog:
     encryptionSaltKeys: 00000000000000000000000000000000
     browserlessToken: ci-browserless-token
     internalApiSecret: ci-internal-api-secret
+    internalRequestToken: ci-internal-request-token
+    recordingApiJwtSecret: ci-recording-api-jwt-secret
+
+rasterizer:
+  maxConcurrentActivities: 1
+  seccompProfile: {type: Localhost, localhostProfile: profiles/chrome-sandbox.json}  # copied in by ci.yml
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1536Mi}
 
 router:
   replicas: 1
@@ -31,6 +40,7 @@ clickhouse:
     app: ci-app-pass
     billing: ci-billing-pass
     dictReader: ci-dict-reader-pass
+    signals: ci-signals-pass
 
 objectStorage:
   bundled:

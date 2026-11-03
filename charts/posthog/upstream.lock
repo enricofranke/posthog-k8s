@@ -1,16 +1,16 @@
-ref: 18b824b7932ad13f25602b4ea0376fc568ac4b22
+ref: 4ba4b09d38a141f971591eb6b3e91848e0d0fdb9
 inputs:
-  .env.services: f4464e2c98a5691675176a5071d9db971fde8e39a665bee3b9cb489190b95d6d
-  bin/docker-server: fc1693e3d3561cceaa26256d96155f2532880eba34126e05debac903e4ab2f44
-  docker-compose.base.yml: e69fdce7b7173579dd4c0902f621630f0c3e7ffac91f6828e3b753c3fcff51ac
-  docker-compose.hobby.yml: a4544d94786d035fbe8da3d56524a81e301b3214c5512d6d81d295a5c04d5581
+  .env.services: 444b1e108fe93c538d85e061229ebf973baca4a0937d7cd865a2e86a3f0fa711
+  bin/docker-server: e9876b3fa212d015c64132466a9a065969241a9333dcb266bf789134693df6e0
+  docker-compose.base.yml: 0799085bb99563c4c09aa6e2a9cc3beb9bdb8e95b6aba797936cf65746dc1824
+  docker-compose.hobby.yml: 61ea7eaa34737d0dc97ca6ee63802b8940675754c7fbc215e6b39e3c80afb131
   docker/clickhouse/config.d/default.xml: 729f9bdf0c5e490d211f51c27195b75813a68ab5a1ff0aa8e047a0550a714844
   docker/clickhouse/config.xml: baa3a3ebc6ecd6ebdf6f3db5da5e348c33d22308bd394eadaabc33b336ff37bc
   docker/clickhouse/docker-entrypoint-initdb.d/autoresearch-row-policies.sql: c7ecc4d8a5b1868af4ba685dc665472a9c2d3a701a65de356e9f21d55bc4d9e4
   docker/clickhouse/docker-entrypoint-initdb.d/init-db.sh: 86cc5bffdaf0673d50059c7fe99f1277d1d284fbc77845aef8cb14c963c61f5e
-  docker/clickhouse/user_defined_function.xml: 1a6b7764ce001d20e7ce3a02fc78bd707ca81d3670dee5389ef53cce379e2bc4
-  docker/clickhouse/users.xml: efa82678d8ec9597ba02cf42d2b8efa7c1c1e1c6b336eaa95fd0a808b5af8b03
-  docker/kafka/topics.txt: 465193e20c7a34e22809cd4f57d78bc4f27a990419af00747535855fac3cc600
+  docker/clickhouse/user_defined_function.xml: 53b0844c53d6096a03a7cc6c573a35c3202e02d106d74f27812cf093e4f2eade
+  docker/clickhouse/users.xml: 4869beb9d28e39cc3ff70b3506db6f316fb52e8668d49434d96f3899ac719a4d
+  docker/kafka/topics.txt: 4f013537fb030dcbfdcf4457bc4e1048f7de4b182b812675829f00da28be6802
   docker/livestream/configs-hobby.yml: bf867c5214cb266b72546cdf6c358b31efcae51ca2d5bd230c95944ee8f02d3c
   docker/postgres-init-scripts/create-agent-runtime-queue-db.sh: 549783748eb51f1ecd105520a8b2fa1ec0db4494c15efd499f55636e0f159b6f
   docker/postgres-init-scripts/create-behavioral-cohorts-db.sh: 96cc767813f0286f751c4392776b7e54ee2b3b743749cabfa3f4afe7e0ae4696

@@ -231,3 +231,225 @@ tests:
           path: spec.template.spec.securityContext.fsGroupChangePolicy
           value: OnRootMismatch
 
+
+  - it: collapses Temporal task queues on web, worker and temporal-django-worker (single worker polls them all)
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_USE_SINGLE_TASK_QUEUE, value: "true"}
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: web
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_USE_SINGLE_TASK_QUEUE, value: "true"}
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: worker
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_USE_SINGLE_TASK_QUEUE, value: "true"}
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: temporal-django-worker
+
+  - it: shares INTERNAL_REQUEST_TOKEN between web and feature-flags as an optional reference
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INTERNAL_REQUEST_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: INTERNAL_REQUEST_TOKEN
+                optional: true
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: web
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INTERNAL_REQUEST_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: INTERNAL_REQUEST_TOKEN
+                optional: true
+        documentSelector:
+          path: spec.template.spec.containers[0].name
+          value: feature-flags
+
+  - it: reads the new service-to-service secrets from posthog.existingSecret when set
+    set:
+      posthog.existingSecret: my-posthog
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: recording-api
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RECORDING_API_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-posthog
+                key: RECORDING_API_JWT_SECRET
+                optional: true
+
+  - it: gives the HyperCache readers the object-storage credentials by reference
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: hypercache-server
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: OBJECT_STORAGE_SECRET_ACCESS_KEY
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OBJECT_STORAGE_ENDPOINT
+            value: http://RELEASE-NAME-posthog-seaweedfs:8333
+
+  - it: passes the signals ClickHouse password to ClickHouse
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: clickhouse
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLICKHOUSE_SIGNALS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: CLICKHOUSE_SIGNALS_PASSWORD
+
+  - it: renders the AI capture service
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: capture-ai
+    asserts:
+      - isKind:
+          of: Deployment
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CAPTURE_MODE, value: ai}
+
+  - it: gives the wait-for-migrations init container room for the migration graph
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-migrations
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: lets values size the wait-for-migrations init container
+    set:
+      migrations.waitResources:
+        requests: {cpu: 10m, memory: 128Mi}
+        limits: {memory: 3Gi}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: worker
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 3Gi
+
+  - it: caps temporal-django-worker at 10 parallel activities, overridable by name
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "10"}
+
+  - it: lets values raise the activity cap of temporal-django-worker
+    set:
+      services.temporal-django-worker.env:
+        - {name: MAX_CONCURRENT_ACTIVITIES, value: "40"}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "40"}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MAX_CONCURRENT_ACTIVITIES, value: "10"}
+
+  - it: enables object storage on temporal-django-worker (Replay Vision reads the rendered videos there)
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: OBJECT_STORAGE_ENABLED, value: "true"}
+
+  - it: points web, worker and temporal-django-worker at the Gemini gateway when it is on
+    set:
+      geminiGateway.enabled: true
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AI_GATEWAY_URL, value: "http://RELEASE-NAME-posthog-gemini-gateway:8080/v1"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AI_GATEWAY_API_KEY
+            valueFrom:
+              secretKeyRef: {name: RELEASE-NAME-posthog-env, key: AI_GATEWAY_API_KEY, optional: true}
+
+  - it: gives web the gateway too (scanner drafts and questions run there)
+    set:
+      geminiGateway.enabled: true
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+      secrets.keys.AI_GATEWAY_API_KEY: {secret: gemini, key: gateway-token}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AI_GATEWAY_API_KEY
+            valueFrom:
+              secretKeyRef: {name: gemini, key: gateway-token, optional: true}
+
+  - it: leaves other services without the gateway
+    set:
+      geminiGateway.enabled: true
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: plugins
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AI_GATEWAY_URL, value: "http://RELEASE-NAME-posthog-gemini-gateway:8080/v1"}
+
+  - it: sets no gateway env while the gateway is off
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: temporal-django-worker
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AI_GATEWAY_URL, value: "http://RELEASE-NAME-posthog-gemini-gateway:8080/v1"}

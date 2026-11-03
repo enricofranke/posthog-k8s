@@ -149,7 +149,7 @@ usage: include "posthog.secretRef" (list $ "DATABASE_URL") -> "name/key"
 {{- include "posthog.secretRef" (list $ "OBJECT_STORAGE_ACCESS_KEY_ID") -}}
 {{- else if and (eq $key "SESSION_RECORDING_SECRET_ACCESS_KEY") (not $sr.secretAccessKey) -}}
 {{- include "posthog.secretRef" (list $ "OBJECT_STORAGE_SECRET_ACCESS_KEY") -}}
-{{- else if and (has $key (list "SECRET_KEY" "ENCRYPTION_SALT_KEYS" "BROWSERLESS_TOKEN" "INTERNAL_API_SECRET")) $.Values.posthog.existingSecret -}}
+{{- else if and (has $key (list "SECRET_KEY" "ENCRYPTION_SALT_KEYS" "BROWSERLESS_TOKEN" "INTERNAL_API_SECRET" "INTERNAL_REQUEST_TOKEN" "RECORDING_API_JWT_SECRET" "AI_GATEWAY_API_KEY")) $.Values.posthog.existingSecret -}}
 {{- printf "%s/%s" $.Values.posthog.existingSecret $key -}}
 {{- else -}}
 {{- printf "%s/%s" (include "posthog.envSecretName" $) $key -}}
@@ -301,8 +301,7 @@ and the workers from crash-looping on a fresh database.
     allowPrivilegeEscalation: false
     capabilities: {drop: [ALL]}
   resources:
-    requests: {cpu: 50m, memory: 256Mi}
-    limits: {memory: 1Gi}
+    {{- toYaml $.Values.migrations.waitResources | nindent 4 }}
   volumeMounts:
     - name: tmp
       mountPath: /tmp
@@ -329,4 +328,73 @@ and the workers from crash-looping on a fresh database.
   mountPath: /seed
   readOnly: true
 {{- end }}
+{{- end -}}
+
+{{/* Origin of the Gemini gateway; PostHog gets it with /v1 as AI_GATEWAY_URL. */}}
+{{- define "posthog.geminiGatewayOrigin" -}}
+{{- printf "http://%s:%v" (include "posthog.serviceName" (list . "gemini-gateway")) .Values.geminiGateway.port -}}
+{{- end -}}
+
+{{/* AI_GATEWAY_URL / AI_GATEWAY_API_KEY for the services in geminiGateway.clients. */}}
+{{- define "posthog.geminiGatewayClientEnv" -}}
+{{- $ := index . 0 -}}{{- $svc := index . 1 -}}
+{{- if and $.Values.geminiGateway.enabled (has $svc $.Values.geminiGateway.clients) -}}
+{{- toYaml (list
+  (dict "name" "AI_GATEWAY_URL" "value" (printf "%s/v1" (include "posthog.geminiGatewayOrigin" $)))
+  (dict "name" "AI_GATEWAY_API_KEY" "secret" "AI_GATEWAY_API_KEY" "optional" true)) -}}
+{{- else -}}
+[]
+{{- end -}}
+{{- end -}}
+
+{{/*
+Caddyfile of the Gemini gateway (templates/gemini-gateway.yaml). {$...} are read from the env at start.
+args: root, upstream (no trailing slash)
+*/}}
+{{- define "posthog.geminiGatewayCaddyfile" -}}
+{{- $ := index . 0 -}}{{- $upstream := index . 1 -}}
+{
+	admin off
+	persist_config off
+	auto_https off
+	# Error logs carry the request headers; the token is one of them.
+	log {
+		format filter {
+			request>headers>X-Goog-Api-Key delete
+		}
+	}
+}
+
+:{{ $.Values.geminiGateway.port }} {
+	@gemini path /v1beta/* /upload/v1beta/*
+	@authorized {
+		path /v1beta/* /upload/v1beta/*
+		header X-Goog-Api-Key "{$AI_GATEWAY_API_KEY}"
+	}
+
+	route {
+		respond /_health "ok" 200
+
+		reverse_proxy @authorized {{ $upstream }} {
+			header_up Host {upstream_hostport}
+			header_up X-Goog-Api-Key "{$GEMINI_API_KEY}"
+			# Labels for PostHog's own gateway (product, trace, distinct id, properties): not for Google.
+			header_up -X-Posthog-*
+			header_up -X-Forwarded-*
+			# The client sends the upload chunks to this URL and rejects any origin but the gateway's.
+			header_down X-Goog-Upload-Url `^{{ regexQuoteMeta $upstream }}` "{{ include "posthog.geminiGatewayOrigin" $ }}"
+			flush_interval -1
+		}
+
+		handle @gemini {
+			header Content-Type application/json
+			respond `{"error":{"code":401,"status":"UNAUTHENTICATED","message":"gemini-gateway: x-goog-api-key is not this release's AI_GATEWAY_API_KEY"}}` 401
+		}
+
+		handle {
+			header Content-Type application/json
+			respond `{"error":{"code":501,"status":"UNIMPLEMENTED","type":"not_supported","message":"gemini-gateway serves the Gemini API (/v1beta) only; PostHog's OpenAI and Anthropic gateway routes are not available"}}` 501
+		}
+	}
+}
 {{- end -}}

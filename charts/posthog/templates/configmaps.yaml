@@ -32,6 +32,7 @@ data:
 {{- $content = $content | replace "<password>apppass</password>" "<password from_env=\"CLICKHOUSE_APP_PASSWORD\"/>" }}
 {{- $content = $content | replace "<password>billingpass</password>" "<password from_env=\"CLICKHOUSE_BILLING_PASSWORD\"/>" }}
 {{- $content = $content | replace "<password>dictreaderpass</password>" "<password from_env=\"CLICKHOUSE_DICT_READER_PASSWORD\"/>" }}
+{{- $content = $content | replace "<password>signalspass</password>" "<password from_env=\"CLICKHOUSE_SIGNALS_PASSWORD\"/>" }}
 {{- else if eq $dir "docker/clickhouse/config.d" }}
 {{- $content = $content | replace "<host>clickhouse</host>" (printf "<host>%s</host>" $ch) }}
 {{- else if eq $dir "docker/livestream" }}

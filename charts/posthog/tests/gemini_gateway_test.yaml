@@ -1,0 +1,131 @@
+suite: gemini-gateway
+templates:
+  - gemini-gateway.yaml
+tests:
+  - it: is off by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses to render without a Gemini key
+    set:
+      geminiGateway.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "geminiGateway.enabled needs a Gemini API key: geminiGateway.geminiApiKey or secrets.keys.GEMINI_API_KEY"
+
+  - it: runs Caddy with the Gemini key and the gateway token by reference
+    set:
+      geminiGateway.enabled: true
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-gemini-gateway
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: caddy:2.10-alpine
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GEMINI_API_KEY
+            valueFrom:
+              secretKeyRef: {name: gemini, key: api-key}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AI_GATEWAY_API_KEY
+            valueFrom:
+              secretKeyRef: {name: RELEASE-NAME-posthog-env, key: AI_GATEWAY_API_KEY}
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'AI_GATEWAY_API_KEY" \] \|\| \{ echo'
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: checks the token, swaps in the key, strips PostHog's headers and keeps uploads on the gateway
+    set:
+      geminiGateway.enabled: true
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    asserts:
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'header X-Goog-Api-Key "\{\$AI_GATEWAY_API_KEY\}"'
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'header_up X-Goog-Api-Key "\{\$GEMINI_API_KEY\}"'
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'header_up -X-Posthog-\*'
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'header_down X-Goog-Upload-Url `\^https://generativelanguage\\\.googleapis\\\.com` "http://RELEASE-NAME-posthog-gemini-gateway:8080"'
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'request>headers>X-Goog-Api-Key delete'
+      - matchRegex:
+          path: data.Caddyfile
+          pattern: 'admin off'
+
+  - it: takes an inline Gemini key
+    set:
+      geminiGateway.enabled: true
+      geminiGateway.geminiApiKey: inline-key
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GEMINI_API_KEY
+            valueFrom:
+              secretKeyRef: {name: RELEASE-NAME-posthog-env, key: GEMINI_API_KEY}
+
+  - it: reads the token from posthog.existingSecret like the other internal secrets
+    set:
+      geminiGateway.enabled: true
+      posthog.existingSecret: app
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AI_GATEWAY_API_KEY
+            valueFrom:
+              secretKeyRef: {name: app, key: AI_GATEWAY_API_KEY}
+
+  - it: lets the gateway reach only DNS and public addresses on 443
+    set:
+      geminiGateway.enabled: true
+      networkPolicy.enabled: true
+      secrets.keys.GEMINI_API_KEY: {secret: gemini, key: api-key}
+    documentSelector:
+      path: kind
+      value: NetworkPolicy
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value: [Egress]
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+            ports:
+              - port: 443

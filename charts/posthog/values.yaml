@@ -35,8 +35,11 @@ posthog:
   optOutCapture: false
   # -- Where the browser sends CSP reports; empty disables reporting.
   cspReportEndpoint: ""
-  # -- Existing Secret with keys SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET.
-  # Recommended for GitOps: the chart does not generate secrets when this is set.
+  # -- Existing Secret with keys SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET,
+  # INTERNAL_REQUEST_TOKEN, RECORDING_API_JWT_SECRET (and AI_GATEWAY_API_KEY with geminiGateway).
+  # Recommended for GitOps: the chart does not generate secrets when this is set. INTERNAL_REQUEST_TOKEN
+  # and RECORDING_API_JWT_SECRET are optional: without them flag test evaluation in the UI fails and
+  # recording-api falls back to INTERNAL_API_SECRET (see CHANGELOG 0.2.0).
   existingSecret: ""
   # -- Inline secrets (used only when existingSecret is empty). Empty values are generated on install
   # and kept across upgrades via lookup. NOTE: `helm template` and Argo CD render without lookup, so
@@ -46,6 +49,10 @@ posthog:
     encryptionSaltKeys: ""
     browserlessToken: ""
     internalApiSecret: ""
+    # -- Shared by web/worker/temporal-django-worker and feature-flags (Django -> flags calls).
+    internalRequestToken: ""
+    # -- Signs the team-scoped tokens web/worker/temporal-django-worker send to recording-api.
+    recordingApiJwtSecret: ""
     anthropicApiKey: ""
     openaiApiKey: ""
 
@@ -53,9 +60,10 @@ secrets:
   # -- Generate missing secret values at install time. Set false to fail instead of generating.
   generate: true
   # -- Route individual secret keys to an existing Secret: KEY: {secret: name, key: keyInSecret}.
-  # Keys: SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET, ANTHROPIC_API_KEY,
-  # OPENAI_API_KEY, DATABASE_URL, PGUSER, PGPASSWORD, CLICKHOUSE_API_PASSWORD, CLICKHOUSE_APP_PASSWORD,
-  # CLICKHOUSE_BILLING_PASSWORD, CLICKHOUSE_DICT_READER_PASSWORD, OBJECT_STORAGE_ACCESS_KEY_ID,
+  # Keys: SECRET_KEY, ENCRYPTION_SALT_KEYS, BROWSERLESS_TOKEN, INTERNAL_API_SECRET, INTERNAL_REQUEST_TOKEN,
+  # RECORDING_API_JWT_SECRET, ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, AI_GATEWAY_API_KEY,
+  # DATABASE_URL, PGUSER, PGPASSWORD, CLICKHOUSE_API_PASSWORD, CLICKHOUSE_APP_PASSWORD, CLICKHOUSE_BILLING_PASSWORD,
+  # CLICKHOUSE_DICT_READER_PASSWORD, CLICKHOUSE_SIGNALS_PASSWORD, OBJECT_STORAGE_ACCESS_KEY_ID,
   # OBJECT_STORAGE_SECRET_ACCESS_KEY, SESSION_RECORDING_ACCESS_KEY_ID, SESSION_RECORDING_SECRET_ACCESS_KEY.
   keys: {}
 
@@ -98,6 +106,8 @@ clickhouse:
     app: ""
     billing: ""
     dictReader: ""
+    # -- Read-only user for PostHog's Signals product (fails closed without it).
+    signals: ""
   external:
     host: ""
 
@@ -120,6 +130,20 @@ temporal:
   visibilityDatabase: temporal_visibility
   # -- Set true when the databases exist already (the PostgreSQL user has no CREATEDB).
   skipDbCreate: false
+  searchAttributes:
+    # -- Register PostHog's custom search attributes (PostHogTeamId, PostHogOrgId, ...) in Temporal after
+    # every install and upgrade. Temporal with SQL visibility starts without them, and workflows that set
+    # them fail to start. Runs upstream's `manage.py register_temporal_search_attributes`, which adds only
+    # the missing ones; the list comes from the pinned PostHog image.
+    enabled: true
+    # -- Temporal namespace the PostHog services use (their TEMPORAL_NAMESPACE, upstream default `default`).
+    namespace: default
+  schedules:
+    # -- Create PostHog's Temporal schedules after every install and upgrade (`manage.py
+    # schedule_temporal_workflows`): Replay Vision scanners, insight alerts, subscriptions, error
+    # tracking digests and the other periodic jobs. Upstream's bin/migrate skips this on hobby
+    # deploys; without it none of that periodic work runs. Idempotent.
+    enabled: true
 
 # Object storage for exports, symbol sets, AI blobs. S3-compatible.
 objectStorage:
@@ -185,6 +209,78 @@ router:
     enabled: true
     minAvailable: 1
 
+rasterizer:
+  # -- Session replay rasterizer (upstream's Node.js worker with chrome-headless-shell). It renders
+  # recordings to video for Replay Vision scans and replay video exports, which wait on Temporal's
+  # `rasterization-task-queue` until it runs. Needs temporal-django-worker.
+  enabled: true
+  replicas: 1
+  # -- Parallel renders per pod. Each one holds a Chromium (~300-800 MB); the worker takes fewer
+  # above 70 % of the memory limit.
+  maxConcurrentActivities: 2
+  # -- Restart the container when the Temporal worker reports FAILED. Upstream's process stays up in
+  # that state (e.g. after a Temporal restart) with a healthy /_health and no poller, so scans wait
+  # until they time out. The chart runs `command` behind files/rasterizer/watch.sh.
+  exitOnWorkerFailure: true
+  # -- The image's CMD (Dockerfile.recording-rasterizer), run by the watcher.
+  command: [node, nodejs/dist/session-replay/recording-rasterizer/index.js]
+  # -- Seconds a stopping pod lets running renders finish; the rest are retried elsewhere.
+  shutdownGraceSeconds: 120
+  # -- Egress proxy for Chromium and the S3 client (e.g. `http://smokescreen:4750`). Recordings are
+  # untrusted content. Empty: direct egress (`RASTERIZER_USE_PROXY=false`); with
+  # `networkPolicy.enabled` the pod then reaches only Temporal, recording-api, DNS and public
+  # addresses on ports 80/443.
+  egressProxy: ""
+  # -- Pod seccomp profile. Chromium's sandbox needs a profile that allows clone, unshare and
+  # chroot; RuntimeDefault does not, and the pod then fails with "No usable sandbox!". Install
+  # docs/seccomp/chrome-sandbox.json on the nodes and use
+  # `{type: Localhost, localhostProfile: profiles/chrome-sandbox.json}` (see docs/rasterizer.md).
+  seccompProfile: {type: RuntimeDefault}
+  # -- Keep Chromium's sandbox. `false` starts it with --no-sandbox: a renderer exploit in a
+  # crafted recording (anyone with the project token can send one) then runs as the worker, which
+  # holds SECRET_KEY and the object storage keys. Only for clusters that cannot load the profile.
+  chromeSandbox: true
+  nodeSelector: {}
+  resources:
+    requests: {cpu: 250m, memory: 768Mi}
+    limits: {memory: 3Gi}
+  priorityClassName: ""
+  # -- Extra env, e.g. `SCREENSHOT_JPEG_QUALITY` or `MAX_IDLE_BROWSERS`.
+  env: []
+  networkPolicy:
+    # -- Address ranges the browser may not reach on 80/443 (private, CGNAT, link-local, loopback).
+    blockedCidrs: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+    # -- Additional egress rules, e.g. an in-cluster S3 such as MinIO.
+    extraEgress: []
+
+# Gemini-only stand-in for PostHog's AI gateway (docs/gemini-gateway.md). Replay Vision sends every
+# Gemini call through that gateway (AI_GATEWAY_URL), which PostHog does not publish. This Caddy proxy
+# takes the Gemini API with an internal token, replaces it with your Gemini key, drops PostHog's
+# label headers and forwards to Google. Other features that use the gateway (OpenAI/Anthropic
+# models) get 501.
+geminiGateway:
+  enabled: false
+  # -- Google Gemini API key (inline, lands in the chart's Secret). For GitOps map it instead:
+  # `secrets.keys.GEMINI_API_KEY: {secret: <name>, key: <key>}`.
+  geminiApiKey: ""
+  # -- Internal token between PostHog and the gateway (AI_GATEWAY_API_KEY); generated when empty.
+  # Under Argo CD put it in posthog.existingSecret or map it with secrets.keys.AI_GATEWAY_API_KEY.
+  token: ""
+  # -- Gemini API endpoint the requests go to.
+  upstream: https://generativelanguage.googleapis.com
+  replicas: 1
+  port: 8080
+  # -- Services that get AI_GATEWAY_URL and AI_GATEWAY_API_KEY. Replay Vision runs in all three
+  # (scans in temporal-django-worker, scanner drafts and questions in web).
+  clients: [web, worker, temporal-django-worker]
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {memory: 256Mi}
+  networkPolicy:
+    # -- Address ranges the gateway may not reach on 443 (it only needs the Gemini API).
+    blockedCidrs: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+    extraEgress: []
+
 # Trusted-header login: log users in from headers set by an authenticating proxy (Teleport,
 # oauth2-proxy, Authelia, Pomerium). Requires the auth overlay image, see docs/auth-proxy.md.
 authProxy:
@@ -246,6 +342,18 @@ migrations:
   enabled: true
   backoffLimit: 3
   activeDeadlineSeconds: 3600
+  # -- Before `bin/migrate`, rebuild an empty `raw_sessions_v3` that still has the pre-2026-10-28 shape
+  # (uniqExact). ClickHouse migration 0364 would otherwise attach views that cannot write to it, and
+  # inserts into sharded_events would fail. The empty v3 tables and views are dropped and their migration
+  # records reset, so the migrations recreate them; a v3 table that holds rows stops the Job with the
+  # manual steps instead.
+  sessionsV3Reset: true
+  # -- Resources of the wait-for-migrations init container in web and the workers. It runs
+  # `manage.py migrate --check`, which loads the whole migration graph; since upstream's move to
+  # Django 6.1 (2026-10) that no longer fits in 1Gi.
+  waitResources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 2Gi}
 
 networkPolicy:
   # -- Default-deny ingress for chart pods; allow traffic inside the release and to the router.

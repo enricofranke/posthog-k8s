@@ -41,7 +41,7 @@ progress() {
 }
 # A fresh install applies thousands of Django and ClickHouse migrations; on a 4 vCPU runner
 # that takes 20-30 minutes (a cached schema seed cuts it to a few). Real failures are caught earlier by the fail-fast check above.
-helm upgrade --install "$RELEASE" "$CHART" -n "$NAMESPACE" -f "$VALUES" ${EXTRA_VALUES:+-f "$EXTRA_VALUES"} --wait --timeout "${HELM_TIMEOUT:-35m}" &
+helm upgrade --install "$RELEASE" "$CHART" -n "$NAMESPACE" -f "$VALUES" ${EXTRA_VALUES:+-f "$EXTRA_VALUES"} --wait --timeout "${HELM_TIMEOUT:-60m}" &
 HELM_PID=$!
 progress &
 PROGRESS_PID=$!

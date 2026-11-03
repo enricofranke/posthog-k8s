@@ -1,0 +1,211 @@
+suite: jobs
+templates:
+  - jobs.yaml
+tests:
+  - it: registers the Temporal search attributes in a post-install/post-upgrade hook
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^posthog/posthog:[0-9a-f]{40}
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/sh", "-ec"]
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'until python manage\.py register_temporal_search_attributes --namespace "default"; do'
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: talks to Temporal with temporal-django-worker's env
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TEMPORAL_HOST
+            value: RELEASE-NAME-posthog-temporal
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: SECRET_KEY
+
+  - it: follows env overrides of temporal-django-worker (e.g. an external Temporal)
+    set:
+      services.temporal-django-worker.env:
+        - {name: TEMPORAL_HOST, value: temporal.example.internal}
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_HOST, value: temporal.example.internal}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: TEMPORAL_HOST, value: RELEASE-NAME-posthog-temporal}
+
+  - it: uses the configured Temporal namespace
+    set:
+      temporal.searchAttributes.namespace: my-namespace
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--namespace "my-namespace"'
+
+  - it: can be turned off
+    set:
+      temporal.searchAttributes.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-temporal-search-attributes
+          skipEmptyTemplates: true
+
+  - it: is skipped when temporal-django-worker is disabled
+    set:
+      services.temporal-django-worker.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-temporal-search-attributes
+          skipEmptyTemplates: true
+
+  - it: keeps the migrate job on web's env
+    documentSelector:
+      path: metadata.labels["app.kubernetes.io/component"]
+      value: migrate
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: GRANIAN_WORKERS, value: "2"}
+
+  - it: resets an old-shape raw_sessions_v3 before bin/migrate
+    documentSelector:
+      path: metadata.labels["app.kubernetes.io/component"]
+      value: migrate
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/bin/sh", "-ec"]
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "^python - <<'PY'\\n"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'ALTER TABLE \{DB\}\.infi_clickhouse_orm_migrations DELETE'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'DROP TABLE IF EXISTS \{DB\}\.sharded_raw_sessions_v3 SYNC'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "\\nPY\\nexec \\./bin/migrate$"
+
+  - it: runs plain bin/migrate when the sessions v3 reset is off
+    set:
+      migrations.sessionsV3Reset: false
+    documentSelector:
+      path: metadata.labels["app.kubernetes.io/component"]
+      value: migrate
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["./bin/migrate"]
+      - notExists:
+          path: spec.template.spec.containers[0].args
+
+  - it: keeps the finished migrate Job for Argo CD instead of replacing it on every sync
+    documentSelector:
+      path: metadata.labels["app.kubernetes.io/component"]
+      value: migrate
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^RELEASE-NAME-posthog-migrate-[0-9a-f]{8}$
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/compare-options"]
+          value: IgnoreExtraneous
+      - notExists:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+      - notExists:
+          path: spec.ttlSecondsAfterFinished
+
+  - it: still expires the hook Jobs after a day
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-search-attributes
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 86400
+
+  - it: creates PostHog's Temporal schedules after the search attributes
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-posthog-temporal-schedules
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "1"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'until timeout 300 python manage\.py schedule_temporal_workflows; do'
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TEMPORAL_HOST
+            value: RELEASE-NAME-posthog-temporal
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: can leave the Temporal schedules alone
+    set:
+      temporal.schedules.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-temporal-schedules
+          skipEmptyTemplates: true
+
+  - it: skips the Temporal schedules when temporal-django-worker is disabled
+    set:
+      services.temporal-django-worker.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        documentSelector:
+          path: metadata.name
+          value: RELEASE-NAME-posthog-temporal-schedules
+          skipEmptyTemplates: true

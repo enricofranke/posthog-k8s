@@ -519,7 +519,11 @@ def build(rules: dict, source: Source, want_digests: bool) -> tuple[dict, dict[s
         elif r["service"] not in out_services and r["service"] not in ("web",):
             r["optional"] = True  # e.g. capture-ai: defined in base, not in hobby
 
-    # Images: digests for reproducibility.
+    # Images of chart-native services (not in compose), then digests for reproducibility.
+    for key, img in (rules.get("extra_images") or {}).items():
+        if key in images:
+            rw.problems.append(f"extra_images: {key} is also a compose image")
+        images[key] = {"repository": img["repository"], "tag": img["tag"]}
     for key, img in images.items():
         if img["tag"] is None:
             # posthog/posthog publishes every master commit as a tag; the node and Rust images only

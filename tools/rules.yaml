@@ -31,6 +31,12 @@ upstream:
     - posthog/user_scripts
     - share
 
+# Images of chart-native services that the compose files do not define, pinned like the others.
+extra_images:
+  # Session replay rasterizer (templates/rasterizer.yaml). Upstream builds it only when its code
+  # changes, so there is no tag per PostHog commit; `master` is pinned by digest at sync time.
+  recording-rasterizer: {repository: ghcr.io/posthog/posthog-recording-rasterizer, tag: master}
+
 # Compose services that the chart does not render, with the reason (goes into upstream.yaml).
 excluded:
   db: bundled PostgreSQL is rendered from the chart's own template (or an external database is used)
@@ -67,6 +73,7 @@ ports:
   recording-api: {http: 6738}
   livestream: {http: 8080}
   capture: {http: 3000}
+  capture-ai: {http: 3000}
   replay-capture: {http: 3000}
   capture-logs: {http: 4318}
   feature-flags: {http: 3001}
@@ -91,11 +98,13 @@ ports:
   ingestion-logs: {http: 6738}
   ingestion-traces: {http: 6738}
   property-defs-rs: {}
+  property-defs-ai: {}
 
 # Readiness probes. Anything not listed gets a TCP probe on its first port (or none without ports).
 probes:
   web: {httpGet: {path: /_readyz, port: http}}
   capture: {httpGet: {path: /_readiness, port: http}}
+  capture-ai: {httpGet: {path: /_readiness, port: http}}
   replay-capture: {httpGet: {path: /_readiness, port: http}}
   feature-flags: {httpGet: {path: /_readiness, port: http}}
   hypercache-server: {httpGet: {path: /_readiness, port: http}}
@@ -138,6 +147,9 @@ resources:
   temporal: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 1Gi}}
   browserless: {requests: {cpu: 100m, memory: 512Mi}, limits: {memory: 2Gi}}
   cymbal: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 1Gi}}
+  # `run_async_migrations --check` loads Django; since upstream's move to Django 6.1 (2026-10) it was
+  # OOM-killed at 1Gi, like the wait-for-migrations init container (migrations.waitResources).
+  asyncmigrationscheck: {requests: {cpu: 50m, memory: 512Mi}, limits: {memory: 2Gi}}
 
 # Pod security: which user each image runs as. `root` marks images that need uid 0
 # (documented in the chart README); everything else runs non-root with all capabilities dropped.
@@ -145,10 +157,12 @@ run_as:
   # posthog/posthog and posthog/posthog-node ship user `posthog` = uid 10001.
   default: {runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
   capture: {runAsUser: 65534, runAsGroup: 65534}
+  capture-ai: {runAsUser: 65534, runAsGroup: 65534}
   replay-capture: {runAsUser: 65534, runAsGroup: 65534}
   capture-logs: {runAsUser: 65534, runAsGroup: 65534}
   feature-flags: {runAsUser: 65534, runAsGroup: 65534}
   property-defs-rs: {runAsUser: 65534, runAsGroup: 65534}
+  property-defs-ai: {runAsUser: 65534, runAsGroup: 65534}
   hypercache-server: {runAsUser: 65534, runAsGroup: 65534}
   personhog-replica: {runAsUser: 65534, runAsGroup: 65534}
   personhog-router: {runAsUser: 65534, runAsGroup: 65534}
@@ -198,6 +212,11 @@ variables:
   ENCRYPTION_SALT_KEYS: {secret: ENCRYPTION_SALT_KEYS}
   BROWSERLESS_SECRET: {secret: BROWSERLESS_TOKEN}
   INTERNAL_API_SECRET: {secret: INTERNAL_API_SECRET}
+  # Service-to-service secrets upstream's installers generate per install. Optional references:
+  # an existingSecret without the key leaves the variable unset (the behaviour before upstream
+  # introduced them) instead of blocking the pods.
+  INTERNAL_REQUEST_TOKEN: {secret: INTERNAL_REQUEST_TOKEN, optional: true}
+  RECORDING_API_JWT_SECRET: {secret: RECORDING_API_JWT_SECRET, optional: true}
   REGISTRY_URL: {image: posthog}
   POSTHOG_APP_TAG: {image: posthog}
   POSTHOG_NODE_TAG: {image: posthog-node}
@@ -207,6 +226,10 @@ variables:
   OPENAI_API_KEY: {secret: OPENAI_API_KEY, optional: true}
   OPT_OUT_CAPTURE: {tpl: '{{ .Values.posthog.optOutCapture | toString }}'}
   CSP_REPORT_ENDPOINT: {tpl: '{{ .Values.posthog.cspReportEndpoint }}'}
+  # Upstream defaults; override per service through services.<name>.env.
+  HEATMAP_BROWSERLESS_SCREENSHOT_COOKIES_ENABLED: {literal: 'false'}
+  OPENAI_BASE_URL: {literal: 'https://api.openai.com/v1'}
+  OPENAI_MODEL: {literal: 'gpt-4.1-mini'}
   TLS_BLOCK: {literal: ''}
   SEAWEEDFS_DOCKER_NAME: {literal: ''}
 
@@ -236,6 +259,7 @@ env_values:
   CLICKHOUSE_APP_PASSWORD: {secret: CLICKHOUSE_APP_PASSWORD}
   CLICKHOUSE_BILLING_PASSWORD: {secret: CLICKHOUSE_BILLING_PASSWORD}
   CLICKHOUSE_DICT_READER_PASSWORD: {secret: CLICKHOUSE_DICT_READER_PASSWORD}
+  CLICKHOUSE_SIGNALS_PASSWORD: {secret: CLICKHOUSE_SIGNALS_PASSWORD}
   # Object storage (general bucket: exports, symbol sets, AI blobs).
   OBJECT_STORAGE_ENDPOINT: {tpl: '{{ include "posthog.objectStorageEndpoint" $ }}'}
   OBJECT_STORAGE_PUBLIC_ENDPOINT: {tpl: '{{ include "posthog.publicUrl" $ }}'}
@@ -249,6 +273,10 @@ env_values:
   AI_BLOB_S3_REGION: {tpl: '{{ .Values.objectStorage.region }}'}
   AI_BLOB_S3_ACCESS_KEY_ID: {secret: OBJECT_STORAGE_ACCESS_KEY_ID}
   AI_BLOB_S3_SECRET_ACCESS_KEY: {secret: OBJECT_STORAGE_SECRET_ACCESS_KEY}
+  # HyperCache S3 tier of the Rust readers (feature-flags, hypercache-server): the AWS SDK reads
+  # the general bucket's credentials from the standard variables.
+  AWS_ACCESS_KEY_ID: {secret: OBJECT_STORAGE_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: {secret: OBJECT_STORAGE_SECRET_ACCESS_KEY}
   # Session replay blob storage (may be a separate bucket).
   SESSION_RECORDING_V2_S3_ENDPOINT: {tpl: '{{ .Values.sessionReplay.storage.endpoint | default (include "posthog.objectStorageEndpoint" $) }}'}
   SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: {secret: SESSION_RECORDING_ACCESS_KEY_ID}
@@ -302,6 +330,13 @@ env_extra:
     # Celery prefork concurrency defaults to the CPU count; each fork is a full Django process.
     - {name: WEB_CONCURRENCY, value: '2'}
     - {name: CELERY_MAX_TASKS_PER_CHILD, value: '200'}
+  temporal-django-worker:
+    # The Temporal SDK default is 100 parallel activities. One Replay Vision sweep can start that
+    # many scans, and the worker ran out of its 2Gi at once; raise both together.
+    - {name: MAX_CONCURRENT_ACTIVITIES, value: '10'}
+    # Hobby sets OBJECT_STORAGE_ENABLED only on web and worker; PostHog defaults it to false, and
+    # Replay Vision's upload activity then reads every rendered video as empty bytes.
+    - {name: OBJECT_STORAGE_ENABLED, value: 'true'}
   temporal:
     - {name: SKIP_DB_CREATE, value: '{{ .Values.temporal.skipDbCreate | toString }}', tpl: true}
     - {name: DBNAME, value: '{{ .Values.temporal.database }}', tpl: true}

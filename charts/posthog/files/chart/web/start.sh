@@ -34,4 +34,10 @@ python ./bin/granian_metrics.py &
 METRICS_PID=$!
 trap 'kill $METRICS_PID 2>/dev/null; rm -rf "$PROMETHEUS_MULTIPROC_DIR"' EXIT
 
+# One listen socket shared by all workers, for pools that run one request per
+# worker. See bin/granian_shared_socket.py.
+if [ "${POSTHOG_GRANIAN_SHARED_SOCKET:-false}" = "true" ]; then
+    exec python ./bin/granian_shared_socket.py "$APP_TARGET"
+fi
+
 exec granian "$APP_TARGET"

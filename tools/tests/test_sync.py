@@ -186,6 +186,19 @@ def test_build_end_to_end_on_a_miniature_compose():
     assert files == {}
 
 
+def test_extra_images_are_added_for_chart_native_services():
+    """templates/rasterizer.yaml uses an image the compose files do not define; it is pinned
+    like the compose images, and a clash with a compose image is a problem, not an override."""
+    src = FakeSource({"docker-compose.base.yml": MINI_BASE, "docker-compose.hobby.yml": MINI_HOBBY, ".env.services": "REDIS_URL=redis://redis7:6379/\n"})
+    rules = mini_rules()
+    rules["extra_images"] = {"recording-rasterizer": {"repository": "ghcr.io/posthog/posthog-recording-rasterizer", "tag": "master"}}
+    data, _ = su.build(rules, src, want_digests=False)
+    assert data["images"]["recording-rasterizer"] == {"repository": "ghcr.io/posthog/posthog-recording-rasterizer", "tag": "master"}
+    rules["extra_images"] = {"capture": {"repository": "example/capture", "tag": "1"}}
+    with pytest.raises(su.SyncError, match="extra_images: capture"):
+        su.build(rules, src, want_digests=False)
+
+
 def test_build_fails_loudly_on_a_new_upstream_service():
     hobby = MINI_HOBBY + "  brand-new-thing:\n    image: example/new:1\n"
     src = FakeSource({"docker-compose.base.yml": MINI_BASE, "docker-compose.hobby.yml": hobby, ".env.services": ""})
@@ -243,3 +256,60 @@ def test_web_start_script_matches_upstream_docker_server_defaults():
     assert exports and not missing, f"start.sh is out of sync with bin/docker-server: {missing}"
     assert "setpriv" not in ours.replace("does not call\n# setpriv", "").split("set -e", 1)[1]
     assert 'exec granian "$APP_TARGET"' in ours
+
+
+def test_compose_merge_keys_in_environment_are_resolved():
+    """Hobby shares env through YAML anchors merged into `environment` (`<<: *single-temporal-queue`);
+    the merged variables must reach every service that merges them."""
+    base = "services:\n  worker:\n    command: ./bin/docker-worker-celery\n"
+    hobby = """
+x-single-temporal-queue: &single-temporal-queue
+    TEMPORAL_USE_SINGLE_TASK_QUEUE: 'true'
+services:
+  worker:
+    extends: {file: docker-compose.base.yml, service: worker}
+    environment:
+      SITE_URL: https://$DOMAIN
+      <<: *single-temporal-queue
+"""
+    src = FakeSource({"docker-compose.base.yml": base, "docker-compose.hobby.yml": hobby})
+    services = su.load_compose(src, ["docker-compose.base.yml", "docker-compose.hobby.yml"])
+    assert services["worker"]["environment"]["TEMPORAL_USE_SINGLE_TASK_QUEUE"] == "true"
+
+
+def test_service_to_service_secrets_are_optional_references():
+    """INTERNAL_REQUEST_TOKEN and RECORDING_API_JWT_SECRET come from the chart's secret (or
+    posthog.existingSecret) as optional references; the HyperCache S3 credentials reuse the
+    object-storage secret; LLM endpoint defaults stay literal."""
+    rw = su.Rewriter(RULES)
+    env = {e.name: e for e in rw.env("web", {
+        "INTERNAL_REQUEST_TOKEN": "${INTERNAL_REQUEST_TOKEN:-}",
+        "RECORDING_API_JWT_SECRET": "${RECORDING_API_JWT_SECRET:-}",
+        "AWS_ACCESS_KEY_ID": "object_storage_root_user",
+        "AWS_SECRET_ACCESS_KEY": "object_storage_root_password",
+        "CLICKHOUSE_SIGNALS_PASSWORD": "signalspass",
+        "OPENAI_BASE_URL": "${OPENAI_BASE_URL:-https://api.openai.com/v1}",
+        "HEATMAP_BROWSERLESS_SCREENSHOT_COOKIES_ENABLED": "${HEATMAP_BROWSERLESS_SCREENSHOT_COOKIES_ENABLED:-false}",
+    })}
+    assert env["INTERNAL_REQUEST_TOKEN"].out() == {"name": "INTERNAL_REQUEST_TOKEN", "secret": "INTERNAL_REQUEST_TOKEN", "optional": True}
+    assert env["RECORDING_API_JWT_SECRET"].out() == {"name": "RECORDING_API_JWT_SECRET", "secret": "RECORDING_API_JWT_SECRET", "optional": True}
+    assert env["AWS_ACCESS_KEY_ID"].secret == "OBJECT_STORAGE_ACCESS_KEY_ID"
+    assert env["AWS_SECRET_ACCESS_KEY"].secret == "OBJECT_STORAGE_SECRET_ACCESS_KEY"
+    assert env["CLICKHOUSE_SIGNALS_PASSWORD"].secret == "CLICKHOUSE_SIGNALS_PASSWORD"
+    assert env["OPENAI_BASE_URL"].value == "https://api.openai.com/v1"
+    assert env["HEATMAP_BROWSERLESS_SCREENSHOT_COOKIES_ENABLED"].value == "false"
+    assert rw.problems == []
+
+
+def test_every_clickhouse_dev_password_is_replaced_by_the_chart():
+    """Upstream's users.xml ships plaintext dev passwords (apipass, signalspass, ...). The ConfigMap
+    template must swap each one for a from_env reference, otherwise a new upstream user would be
+    reachable with a password that is public on GitHub."""
+    import xml.etree.ElementTree as ET
+
+    chart = Path(__file__).resolve().parents[2] / "charts" / "posthog"
+    users = ET.parse(chart / "files" / "upstream" / "docker" / "clickhouse" / "users.xml").getroot().find("users")
+    plaintext = {u.tag: u.findtext("password") for u in users if u.findtext("password")}
+    template = (chart / "templates" / "configmaps.yaml").read_text()
+    missing = {user: pw for user, pw in plaintext.items() if f'replace "<password>{pw}</password>"' not in template}
+    assert plaintext and not missing, f"templates/configmaps.yaml does not replace these ClickHouse passwords: {missing}"

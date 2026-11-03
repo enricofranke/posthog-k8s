@@ -120,6 +120,9 @@ tests:
           pattern: 'ALTER TABLE \{DB\}\.infi_clickhouse_orm_migrations DELETE'
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
+          pattern: 'DROP TABLE IF EXISTS \{DB\}\.sharded_raw_sessions_v3 SYNC'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
           pattern: "\\nPY\\nexec \\./bin/migrate$"
 
   - it: runs plain bin/migrate when the sessions v3 reset is off

@@ -7,10 +7,12 @@
 # not fit the table, and every insert into sharded_events would fail with them.
 #
 # Upstream's fix is to drop the v3 objects and create them again from sessions_v3.py. The earlier v3
-# migrations do exactly that on a fresh cluster (0158 drops and recreates all of them, every statement is
-# IF [NOT] EXISTS), so for an empty old-shape table it is enough to forget that they ran: bin/migrate then
-# replays them with today's definitions, in order, before 0364. A table that holds rows is left alone and
-# the Job fails with the manual steps, because dropping it would lose data.
+# migrations create them on a fresh cluster, so for an empty old-shape table this drops the v3 objects and
+# forgets that those migrations ran: bin/migrate then replays them with today's definitions, in order,
+# before 0364. Forgetting alone is not enough: 0149 creates the tables IF NOT EXISTS (the old ones stay)
+# and then replaces raw_sessions_v3_v with a view that uniqMerge()s them, which ClickHouse rejects for
+# uniqExact states. A table that holds rows is left alone and the Job fails with the manual steps,
+# because dropping it would lose data.
 import os
 import sys
 import time
@@ -90,19 +92,31 @@ applied = [
         {"package": PACKAGE, "modules": V3_MIGRATIONS},
     )
 ]
-if not applied:
-    log("old-shape table but no v3 migration records, nothing to reset")
-    sys.exit(0)
+# Views first, the replicated table last and SYNC, so its ZooKeeper replica is gone before 0149 creates it.
+DROPS = (
+    f"DROP TABLE IF EXISTS {DB}.raw_sessions_v3_mv",
+    f"DROP TABLE IF EXISTS {DB}.raw_sessions_v3_recordings_mv",
+    f"DROP VIEW IF EXISTS {DB}.raw_sessions_v3_v",
+    f"DROP TABLE IF EXISTS {DB}.raw_sessions_v3",
+    f"DROP TABLE IF EXISTS {DB}.writable_raw_sessions_v3",
+    f"DROP TABLE IF EXISTS {DB}.sharded_raw_sessions_v3 SYNC",
+)
 if os.environ.get("SESSIONS_V3_RESET_DRY_RUN"):
-    log(f"dry run: would forget {len(applied)} applied v3 migrations: {', '.join(sorted(applied))}")
+    log(
+        f"dry run: would drop the empty old-shape v3 objects and forget {len(applied)} applied v3 "
+        f"migrations: {', '.join(sorted(applied)) or '-'}"
+    )
     sys.exit(0)
 
-sync_execute(
-    f"ALTER TABLE {DB}.infi_clickhouse_orm_migrations DELETE "
-    "WHERE package_name = %(package)s AND module_name IN %(modules)s SETTINGS mutations_sync = 2",
-    {"package": PACKAGE, "modules": V3_MIGRATIONS},
-)
+for statement in DROPS:
+    sync_execute(statement)
+if applied:
+    sync_execute(
+        f"ALTER TABLE {DB}.infi_clickhouse_orm_migrations DELETE "
+        "WHERE package_name = %(package)s AND module_name IN %(modules)s SETTINGS mutations_sync = 2",
+        {"package": PACKAGE, "modules": V3_MIGRATIONS},
+    )
 log(
-    f"sharded_raw_sessions_v3 was empty and in the old shape; forgot {len(applied)} applied v3 migrations "
-    "so bin/migrate rebuilds raw_sessions_v3 in the current shape"
+    f"sharded_raw_sessions_v3 was empty and in the old shape; dropped the v3 objects and forgot "
+    f"{len(applied)} applied v3 migrations, so bin/migrate rebuilds raw_sessions_v3 in the current shape"
 )

@@ -34,9 +34,11 @@ chart data was generated from.
   `signals`). Values: `posthog.secrets.internalRequestToken`, `posthog.secrets.recordingApiJwtSecret`,
   `clickhouse.users.signals`.
 - `migrations.sessionsV3Reset` (default on): before `bin/migrate`, the migrate Job rebuilds an empty
-  `raw_sessions_v3` that still has the old shape, by resetting only the v3 migration records so the
-  migrations recreate the tables with today's definitions. A v3 table that holds rows stops the Job
-  with the manual steps. Dry run: `SESSIONS_V3_RESET_DRY_RUN=1`.
+  `raw_sessions_v3` that still has the old shape. It drops the empty v3 tables and views and forgets
+  the v3 migration records, so the migrations recreate them with today's definitions. Forgetting the
+  records alone is not enough, because the replayed 0149 keeps the old tables and fails on its
+  `uniqMerge` view. A v3 table that holds rows stops the Job with the manual steps. Dry run:
+  `SESSIONS_V3_RESET_DRY_RUN=1`.
 
 ### Fixed
 - Temporal workflows on any task queue other than the default never ran (Replay Vision, session

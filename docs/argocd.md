@@ -16,7 +16,7 @@ spec:
   sources:
     - repoURL: ghcr.io/enricofranke/charts
       chart: posthog
-      targetRevision: 0.1.1
+      targetRevision: 0.2.0
       helm:
         releaseName: posthog
         valueFiles:

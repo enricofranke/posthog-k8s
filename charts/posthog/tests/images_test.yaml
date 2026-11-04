@@ -1,0 +1,71 @@
+suite: chart images
+templates:
+  - router.yaml
+  - postgresql.yaml
+  - seaweedfs.yaml
+tests:
+  - it: pins the router's Caddy image by digest
+    template: router.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^caddy:2\.10-alpine@sha256:[0-9a-f]{64}$
+
+  - it: pins the bundled PostgreSQL image by digest
+    template: postgresql.yaml
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^postgres:15\.12-alpine@sha256:[0-9a-f]{64}$
+
+  - it: pins the bundled SeaweedFS image by digest
+    template: seaweedfs.yaml
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^chrislusf/seaweedfs:4\.29@sha256:[0-9a-f]{64}$
+
+  - it: follows the tags with images.pinDigests off
+    template: postgresql.yaml
+    set:
+      images.pinDigests: false
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: postgres:15.12-alpine
+
+  - it: follows the router tag with images.pinDigests off
+    template: router.yaml
+    set:
+      images.pinDigests: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: caddy:2.10-alpine
+
+  - it: takes an overridden tag without a digest as is
+    template: seaweedfs.yaml
+    set:
+      objectStorage.bundled.image.tag: "4.30"
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: chrislusf/seaweedfs:4.30

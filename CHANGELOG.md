@@ -4,6 +4,21 @@ All notable changes to the chart. The format follows [Keep a Changelog](https://
 versions follow [SemVer](https://semver.org/). `appVersion` is the upstream PostHog commit the
 chart data was generated from.
 
+## [0.2.1] - 2026-11-04
+
+### Changed
+- The chart's own images are pinned by digest like the upstream ones: Caddy for the router and the
+  gemini-gateway (`caddy:2.10-alpine`), the bundled PostgreSQL (`postgres:15.12-alpine`) and the
+  bundled SeaweedFS (`chrislusf/seaweedfs:4.29`). The digest (of the multi-arch index) is part of
+  the value, `router.image` and `*.image.tag` read `tag@sha256:...`; override tag and digest
+  together, a tag without a digest follows the tag. With `images.pinDigests: false` the digest is
+  dropped, as for the upstream images.
+
+### Upgrade notes
+- No upstream change: the PostHog services, the migrate Job and the hooks render as in 0.2.0. The
+  router, gemini-gateway and bundled PostgreSQL/SeaweedFS pods restart once, on the image the tag
+  pointed to at release time.
+
 ## [0.2.0] - 2026-11-03
 
 ### Changed

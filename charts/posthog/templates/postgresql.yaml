@@ -36,7 +36,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: postgresql
-          image: "{{ $pg.image.repository }}:{{ $pg.image.tag }}"
+          image: {{ include "posthog.chartImage" (list $ (printf "%s:%s" $pg.image.repository (toString $pg.image.tag))) | quote }}
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_USER

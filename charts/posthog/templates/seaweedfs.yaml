@@ -35,7 +35,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: seaweedfs
-          image: "{{ $os.bundled.image.repository }}:{{ $os.bundled.image.tag }}"
+          image: {{ include "posthog.chartImage" (list $ (printf "%s:%s" $os.bundled.image.repository (toString $os.bundled.image.tag))) | quote }}
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-ec"]
           args:

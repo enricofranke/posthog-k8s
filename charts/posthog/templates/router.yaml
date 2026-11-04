@@ -130,7 +130,7 @@ spec:
               {{- include "posthog.selectorLabels" (list . "router") | nindent 14 }}
       containers:
         - name: caddy
-          image: {{ $r.image | quote }}
+          image: {{ include "posthog.chartImage" (list $ $r.image) | quote }}
           imagePullPolicy: IfNotPresent
           args: [caddy, run, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
           env:

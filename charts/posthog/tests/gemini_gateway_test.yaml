@@ -27,7 +27,7 @@ tests:
           value: RELEASE-NAME-posthog-gemini-gateway
       - equal:
           path: spec.template.spec.containers[0].image
-          value: caddy:2.10-alpine
+          value: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
       - contains:
           path: spec.template.spec.containers[0].env
           content:

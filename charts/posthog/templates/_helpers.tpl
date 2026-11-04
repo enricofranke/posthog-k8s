@@ -111,6 +111,20 @@ can replace repository, tag or digest per key. usage: include "posthog.image" (l
 {{- end -}}
 {{- end -}}
 
+{{/*
+Image reference for the chart's own images (router, bundled PostgreSQL and SeaweedFS), written in
+values as repository:tag@sha256:... With images.pinDigests off the digest is dropped and the tag
+followed. usage: include "posthog.chartImage" (list $ "caddy:2.10-alpine@sha256:...")
+*/}}
+{{- define "posthog.chartImage" -}}
+{{- $ := index . 0 -}}{{- $ref := index . 1 -}}
+{{- if $.Values.images.pinDigests -}}
+{{- $ref -}}
+{{- else -}}
+{{- regexReplaceAll "@sha256:[0-9a-f]{64}$" $ref "" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "posthog.imagePullSecrets" -}}
 {{- with .Values.global.imagePullSecrets }}
 imagePullSecrets:

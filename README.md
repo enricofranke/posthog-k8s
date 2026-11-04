@@ -68,7 +68,7 @@ Kubernetes objects. Upgrading PostHog is "bump the commit, read the diff, run CI
 | 🚪 **Two front doors** | A Caddy router with an `app` listener (full UI and API, put it behind your SSO proxy) and an `ingest` listener that forwards **only** SDK paths and strips identity headers. Your login page never has to be on the internet. |
 | 🗄️ **Your datastores** | External PostgreSQL (a CloudNativePG `uri` secret works out of the box) and S3-compatible object storage for replays and exports. Bundled single-node PostgreSQL and SeaweedFS for evaluation. |
 | 🔑 **Secrets by reference** | Every secret can live in a Secret you own. When you let the chart generate them, they are created once and kept. Nothing secret in the pod spec. |
-| 📌 **Pinned and signed** | Every image pinned by digest at sync time; chart releases pushed to GHCR and signed with cosign (keyless). `appVersion` is the upstream commit. |
+| 📌 **Pinned and signed** | Every image pinned by digest (upstream images at sync time, the chart's own Caddy, PostgreSQL and SeaweedFS in `values.yaml`); chart releases pushed to GHCR and signed with cosign (keyless). `appVersion` is the upstream commit. |
 | 🛡️ **Secure defaults** | Non-root everywhere, all capabilities dropped, no service-account tokens, optional NetworkPolicies, PodDisruptionBudgets, ClickHouse application users with real passwords. |
 | ⚡ **Fast first start** | A schema seed skips the 20-minute migration marathon of a fresh database. |
 | ✅ **Tested for real** | Generator unit tests, `helm lint`, `helm unittest`, `kubeconform`, Caddy config validation, and a full install on kind that signs up, sends an event, an exception, an OTLP log line and evaluates a flag. |

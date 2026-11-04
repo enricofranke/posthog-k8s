@@ -313,7 +313,7 @@ the same cluster send to `http://posthog-router.posthog.svc:8081` directly.
 
 ```bash
 helm install posthog oci://ghcr.io/enricofranke/charts/posthog \
-  --namespace posthog --version 0.2.0 -f values.yaml
+  --namespace posthog --version 0.2.1 -f values.yaml
 ```
 
 With **Argo CD**, use the Application from [docs/argocd.md](docs/argocd.md), with

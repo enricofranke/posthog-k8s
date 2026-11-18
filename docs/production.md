@@ -98,6 +98,50 @@ Minimal IAM policy:
 
 Session replays can use a separate bucket/credentials via `sessionReplay.storage.*`.
 
+### Without an access key (workload identity)
+
+With `objectStorage.auth: serviceAccount` the chart passes no access key: the key variables render
+empty and every S3 client (Python, Node and Rust) falls back to its SDK's default credential chain.
+The identity then comes from the pod's ServiceAccount, whichever way your platform provides it.
+It needs an external endpoint; the bundled SeaweedFS only accepts its own keys.
+
+```yaml
+objectStorage:
+  endpoint: https://s3.eu-central-1.amazonaws.com
+  bucket: my-posthog
+  region: eu-central-1
+  auth: serviceAccount
+  bundled: {enabled: false}
+  # Only the services that read or write object storage run as this one; the rest keep
+  # serviceAccount (or the namespace default), so they never get the identity.
+  serviceAccount:
+    create: true
+    annotations: {}   # whatever your platform's workload identity binds on, if anything
+```
+
+Two ways to get the identity to the pods:
+
+- **A platform webhook.** If your cluster injects credentials for annotated ServiceAccounts, put
+  the annotation in `objectStorage.serviceAccount.annotations` and you are done.
+- **The chart's projected token.** `objectStorage.webIdentity` mounts a token of the pod's
+  ServiceAccount (`audience`, `expirationSeconds`) into the object storage services and sets
+  `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE` and, with `stsEndpoint`, `AWS_ENDPOINT_URL_STS`.
+  The SDKs exchange it through `AssumeRoleWithWebIdentity`, so it works with any S3 store whose STS
+  trusts your cluster's service-account issuer (AWS, MinIO, Ceph RGW, ...), no webhook needed.
+
+```yaml
+objectStorage:
+  webIdentity:
+    enabled: true
+    roleArn: <role to assume, in the provider's format>
+    audience: sts.amazonaws.com   # what the provider's STS expects
+    stsEndpoint: ""               # e.g. https://minio.example.com for MinIO's STS
+```
+
+cymbal (error-tracking symbol sets) only recognises web-identity credentials
+(`AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE`); other credential sources leave it without object
+storage. `services.<name>.serviceAccountName` overrides the ServiceAccount of a single service.
+
 ## 4. Local volumes for ClickHouse, Redpanda, Zookeeper, Redis
 
 These are single-instance; put them on fast local disks and pin the claims to pre-provisioned

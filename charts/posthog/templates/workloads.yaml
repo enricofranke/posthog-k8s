@@ -59,6 +59,16 @@ spec:
     spec:
       {{- include "posthog.imagePullSecrets" $root | nindent 6 }}
       automountServiceAccountToken: false
+      {{- $podEnv := list $svc.env }}
+      {{- range $sname, $side := $up.services }}
+      {{- if and (eq $side.kind "sidecar") (eq $side.sidecarOf $name) }}
+      {{- $podEnv = append $podEnv $side.env }}
+      {{- end }}
+      {{- end }}
+      {{- $webIdentity := include "posthog.webIdentity" (list $root (include "posthog.usesObjectStorage" (list $svc.env))) }}
+      {{- with include "posthog.podServiceAccountName" (list $root $name (include "posthog.usesObjectStorage" $podEnv)) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ $ov.terminationGracePeriodSeconds | default (ternary 120 30 $isStateful) }}
       {{- with $ov.priorityClassName }}
       priorityClassName: {{ . }}
@@ -100,6 +110,9 @@ spec:
               valueFrom:
                 secretKeyRef: {name: {{ $ref._0 }}, key: {{ $ref._1 }}}
             {{- end }}
+            {{- end }}
+            {{- if $webIdentity }}
+            {{- include "posthog.webIdentityEnv" $root | nindent 12 }}
             {{- end }}
             {{- with $ov.env }}
             {{- toYaml . | nindent 12 }}
@@ -160,6 +173,9 @@ spec:
             {{- end }}
             - name: tmp
               mountPath: /tmp
+            {{- if $webIdentity }}
+            {{- include "posthog.webIdentityVolumeMount" $root | nindent 12 }}
+            {{- end }}
             {{- if eq $name "clickhouse" }}
             {{- include "posthog.seedMount" $root | nindent 12 }}
             {{- end }}
@@ -208,6 +224,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if $webIdentity }}
+        {{- include "posthog.webIdentityVolume" $root | nindent 8 }}
+        {{- end }}
         {{- if eq $name "clickhouse" }}
         {{- include "posthog.seedVolume" $root | nindent 8 }}
         {{- end }}

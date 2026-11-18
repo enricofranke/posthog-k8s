@@ -4,6 +4,30 @@ All notable changes to the chart. The format follows [Keep a Changelog](https://
 versions follow [SemVer](https://semver.org/). `appVersion` is the upstream PostHog commit the
 chart data was generated from.
 
+## [Unreleased]
+
+### Added
+- `serviceAccount.{create,name,annotations,labels}`: the ServiceAccount every pod runs as (the
+  namespace's `default` until now, still the default). `services.<name>.serviceAccountName`
+  overrides it per upstream service.
+- `objectStorage.auth: serviceAccount`: object storage without an access key. The key variables
+  render empty, so every S3 client uses its SDK's default credential chain, i.e. the identity of the
+  pod's ServiceAccount; the chart Secret no longer carries object storage keys, and the
+  "endpoint is set: provide accessKeyId" check is skipped. Needs an external endpoint.
+  `sessionReplay.storage` keeps its own keys when it has them.
+- `objectStorage.serviceAccount.*`: a separate ServiceAccount for only the services and jobs that
+  read object storage credentials (decided from their env in upstream.yaml: web, worker, plugins,
+  temporal-django-worker, feature-flags, hypercache-server, cymbal, cymbal-resolution,
+  ingestion-general, ingestion-sessionreplay, recording-api, the rasterizer, migrate and the hooks),
+  so the identity is not granted to ClickHouse, Kafka, Redis and the rest.
+- `objectStorage.webIdentity.*`: mounts a projected ServiceAccount token into those services and
+  sets `AWS_ROLE_ARN` / `AWS_WEB_IDENTITY_TOKEN_FILE` (and `AWS_ENDPOINT_URL_STS`), for any S3 store
+  whose STS supports `AssumeRoleWithWebIdentity`, without a platform webhook.
+
+### Upgrade notes
+- Defaults render the same manifests as 0.2.1: no ServiceAccount is created and no pod sets
+  `serviceAccountName`. `automountServiceAccountToken` stays `false` everywhere.
+
 ## [0.2.1] - 2026-11-04
 
 ### Changed

@@ -55,6 +55,9 @@ jobs:
     timeout-minutes: 85
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
       - uses: azure/setup-helm@v4
         with:
           version: v3.17.3
@@ -74,6 +77,10 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           docker exec posthog-control-plane mkdir -p /var/lib/kubelet/seccomp/profiles
           docker cp docs/seccomp/chrome-sandbox.json posthog-control-plane:/var/lib/kubelet/seccomp/profiles/chrome-sandbox.json
+      - name: Build the web overlay from overlay/ and load it into the kind node
+        run: |
+          make overlay-build OVERLAY_IMAGE=posthog-k8s/posthog-web:e2e
+          kind load docker-image posthog-k8s/posthog-web:e2e --name posthog
       - name: Restore schema seed for this upstream commit
         id: seed
         uses: actions/cache/restore@v4
@@ -92,7 +99,7 @@ jobs:
         if: steps.seed.outputs.cache-hit != 'true'
         run: e2e/export-seed.sh .seed
       - name: Smoke tests
-        run: make e2e-test
+        run: make e2e-test SMOKE_ARGS=--auth-proxy
       - name: Save schema seed
         if: steps.seed.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

@@ -74,6 +74,22 @@ By design: only SDK paths are forwarded on :8081. The list comes from upstream's
 `router.ingest.webPaths`. If an SDK needs a new path after an upstream change, add it there and
 open an issue.
 
+## Trusted-header login (`authProxy`)
+
+`web` logs one line per decision; `kubectl -n posthog logs deploy/<release>-web | grep auth_proxy`.
+
+| Symptom | Cause |
+|---|---|
+| Rendering fails: `authProxy.enabled needs networkPolicy.enabled ...` | The login only renders with a NetworkPolicy that names who may reach the app listener (`networkPolicy.appIngressFrom`). |
+| Rendering fails: `authProxy.enabled needs authProxy.image` | No overlay image is pinned for this chart version. Build one with `make overlay-build`, push it and set `authProxy.image`. |
+| The login page appears although the proxy let you through | `web` saw no identity: the proxy does not send the email header (`authProxy.emailHeader`), the request did not pass the router's app listener, or router and `web` hold different secrets (restart both after rotating `AUTH_PROXY_SECRET`). |
+| 403 `auth_proxy_no_access` | None of the user's groups maps to an existing organization. `auth_proxy_unknown_organizations` in the log names references that match no slug or ID; `auth_proxy_denied` means no group matched `authProxy.groups` at all. |
+| 400 `auth_proxy_bad_headers` | An identity header arrived more than once, or the email header is not one address. The proxy appends to the client's headers instead of replacing them; `auth_proxy_rejected` in the log names the header. |
+| 403 `password_login_disabled` | `authProxy.passwordLogin: false`. [Break-glass](auth-proxy.md#password-login-and-break-glass). |
+| A membership given in the UI disappears | Groups are authoritative for member and admin; map a group instead. Owner is left alone. |
+| `web` does not start: `ConfigError` | The login is enabled and misconfigured (empty secret, a header name used twice), or the overlay does not match the PostHog image. It refuses to start instead of serving without the login. |
+| A pod of the release gets a timeout from `<release>-router:8080` | With `networkPolicy.enabled` the app listener accepts `appIngressFrom` only. In-cluster clients belong on the ingest listener (`:8081`). |
+
 ## Pod fails to start with `not a directory` or `Invalid value ... must not contain dots`
 
 Both were chart bugs (nested subPath mounts into ConfigMap directories; volume names derived from

@@ -199,14 +199,67 @@ apps:
     labels: {app: posthog}
     rewrite:
       headers:
+        - "X-Forwarded-User: {{internal.logins}}"
         - "X-Forwarded-Email: {{external.email}}"
         - "X-Forwarded-Groups: {{internal.kubernetes_groups}}"
 ```
 
 Give roles `app_labels: {app: posthog}`. `external.email` is the email your SSO connector passes
 on; PostHog accounts are matched by it, so only send an address the identity provider has
-verified. Until the header login ships ([auth-proxy.md](auth-proxy.md)), users log in to PostHog
-with their own account after passing Teleport.
+verified. `X-Forwarded-User` is only the display name of a new account, but set all three: a header
+the proxy leaves out is one the client can send. Without `authProxy.enabled`, users log in to PostHog with their own account after
+passing Teleport.
+
+### oauth2-proxy example
+
+[oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) as the reverse proxy in front of the
+app listener, against any OIDC provider:
+
+```yaml
+# values of the oauth2-proxy chart; client ID, client secret and cookie secret come from a Secret
+extraArgs:
+  provider: oidc
+  oidc-issuer-url: https://idp.example.com/realms/main
+  redirect-url: https://posthog.example.com/oauth2/callback
+  email-domain: "*"
+  scope: openid email profile groups
+  oidc-groups-claim: groups
+  upstream: http://posthog-router.posthog.svc.cluster.local:8080
+  reverse-proxy: true
+```
+
+Point the Ingress for `posthog.example.com` at oauth2-proxy, not at the router. oauth2-proxy
+passes `X-Forwarded-User`, `X-Forwarded-Email` and `X-Forwarded-Groups` to its upstream
+(`pass-user-headers`, on by default), which are the chart's default header names, and sets them
+itself on every request instead of forwarding what the client sent. Two of its defaults matter
+here, leave them as they are: `insecure-oidc-allow-unverified-email=false` (an unverified address
+is refused, and accounts are matched by email) and `skip-auth-strip-headers=true` (on routes you
+exempt from authentication the client's copies of these headers are removed).
+
+### Turning on the header login
+
+With one of the proxies above in place, the chart side is ([auth-proxy.md](auth-proxy.md) has the
+details and the trust model):
+
+```yaml
+authProxy:
+  enabled: true
+  groups:
+    platform-admins: {organizations: ["*"], level: admin}
+    acme-developers: {organizations: [acme], level: member}     # organization slug or ID
+  # passwordLogin: false          # the proxy as the only way in; read "break-glass" first
+
+networkPolicy:
+  enabled: true
+  appIngressFrom:                  # required: only the proxy may reach the app listener
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: oauth2-proxy}}
+```
+
+Add `AUTH_PROXY_SECRET` (a random string, `openssl rand -hex 32`) to the `posthog-app` Secret from
+section 5; the router and `web` read it from there. Create the organizations first (the login does
+not), and keep the account you signed up with: it owns its organization and is your way in if the
+proxy is down. Whatever proxy you use, check that it replaces identity headers a client sends
+instead of adding its own next to them; PostHog answers 400 to a request that carries one twice.
 
 ## 7. Multiple organizations
 

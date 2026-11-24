@@ -25,6 +25,24 @@ router:
   podDisruptionBudget:
     enabled: false
 
+# Trusted-header login. web runs the overlay that ci.yml builds from overlay/ and loads into kind.
+# No proxy sits in front of the app listener: the smoke test plays it through a port-forward,
+# which the NetworkPolicy does not apply to, so appIngressFrom only has to name somebody.
+authProxy:
+  enabled: true
+  image: posthog-k8s/posthog-web:e2e
+  sharedSecret: ci-only-auth-proxy-shared-secret-0123456789
+  groups:
+    e2e-admins: {organizations: ["*"], level: admin}
+    e2e-members: {organizations: ["*"], level: member}
+    e2e-smoke-org: {organizations: [smoke-org], level: member}
+    e2e-nowhere: {organizations: [no-such-organization], level: admin}
+
+networkPolicy:
+  enabled: true
+  appIngressFrom:
+    - podSelector: {matchLabels: {app.kubernetes.io/name: identity-aware-proxy}}
+
 postgresql:
   auth:
     password: ci-postgres-password

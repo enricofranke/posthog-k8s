@@ -26,6 +26,9 @@ spec:
     spec:
       {{- include "posthog.imagePullSecrets" . | nindent 6 }}
       automountServiceAccountToken: false
+      {{- with include "posthog.podServiceAccountName" (list . "postgresql" "") }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true

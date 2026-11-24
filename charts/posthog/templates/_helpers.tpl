@@ -175,6 +175,116 @@ usage: include "posthog.secretRef" (list $ "DATABASE_URL") -> "name/key"
 {{- end -}}
 
 {{/*
+"true" when an object storage key renders as an empty value instead of a Secret reference: with
+objectStorage.auth=serviceAccount the S3 clients fall back to the pod's identity. Empty, not unset:
+the Node session-replay client defaults both keys to "any".
+usage: include "posthog.keylessStorageKey" (list $ "OBJECT_STORAGE_ACCESS_KEY_ID")
+*/}}
+{{- define "posthog.keylessStorageKey" -}}
+{{- $ := index . 0 -}}{{- $key := index . 1 -}}
+{{- $sr := $.Values.sessionReplay.storage -}}
+{{- if eq $.Values.objectStorage.auth "serviceAccount" -}}
+{{- if has $key (list "OBJECT_STORAGE_ACCESS_KEY_ID" "OBJECT_STORAGE_SECRET_ACCESS_KEY") -}}
+true
+{{- else if and (has $key (list "SESSION_RECORDING_ACCESS_KEY_ID" "SESSION_RECORDING_SECRET_ACCESS_KEY")) (not $sr.accessKeyId) (not $sr.existingSecret) (not (index $.Values.secrets.keys $key)) -}}
+true
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+"true" when any of the env lists reads object storage credentials.
+usage: include "posthog.usesObjectStorage" (list $envList $otherEnvList)
+*/}}
+{{- define "posthog.usesObjectStorage" -}}
+{{- $keys := list "OBJECT_STORAGE_ACCESS_KEY_ID" "OBJECT_STORAGE_SECRET_ACCESS_KEY" "SESSION_RECORDING_ACCESS_KEY_ID" "SESSION_RECORDING_SECRET_ACCESS_KEY" -}}
+{{- $uses := false -}}
+{{- range $env := . }}{{ range $env }}{{ if has (.secret | default "") $keys }}{{ $uses = true }}{{ end }}{{ end }}{{ end -}}
+{{- if $uses }}true{{ end -}}
+{{- end -}}
+
+{{/*
+"true" when objectStorage.webIdentity applies to a pod that reads object storage credentials.
+usage: include "posthog.webIdentity" (list $ (include "posthog.usesObjectStorage" ...))
+*/}}
+{{- define "posthog.webIdentity" -}}
+{{- $ := index . 0 -}}{{- $usesObjectStorage := index . 1 -}}
+{{- $os := $.Values.objectStorage -}}
+{{- if and $usesObjectStorage (eq $os.auth "serviceAccount") $os.webIdentity.enabled -}}
+{{- if not $os.webIdentity.roleArn -}}
+{{- fail "objectStorage.webIdentity.enabled needs objectStorage.webIdentity.roleArn" -}}
+{{- end -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{- define "posthog.webIdentityEnv" -}}
+{{- $wi := .Values.objectStorage.webIdentity -}}
+- name: AWS_ROLE_ARN
+  value: {{ $wi.roleArn | quote }}
+- name: AWS_WEB_IDENTITY_TOKEN_FILE
+  value: /var/run/secrets/posthog/web-identity/token
+{{- with $wi.stsEndpoint }}
+- name: AWS_ENDPOINT_URL_STS
+  value: {{ . | quote }}
+{{- end }}
+{{- end -}}
+
+{{- define "posthog.webIdentityVolumeMount" -}}
+- name: web-identity-token
+  mountPath: /var/run/secrets/posthog/web-identity
+  readOnly: true
+{{- end -}}
+
+{{- define "posthog.webIdentityVolume" -}}
+{{- $wi := .Values.objectStorage.webIdentity -}}
+- name: web-identity-token
+  projected:
+    sources:
+      - serviceAccountToken:
+          audience: {{ $wi.audience | quote }}
+          expirationSeconds: {{ $wi.expirationSeconds }}
+          path: token
+{{- end -}}
+
+{{- define "posthog.serviceAccountName" -}}
+{{- if .Values.serviceAccount.name -}}
+{{- .Values.serviceAccount.name -}}
+{{- else if .Values.serviceAccount.create -}}
+{{- include "posthog.fullname" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "posthog.objectStorageServiceAccountName" -}}
+{{- $sa := .Values.objectStorage.serviceAccount -}}
+{{- if $sa.name -}}
+{{- $sa.name -}}
+{{- else if $sa.create -}}
+{{- printf "%s-object-storage" (include "posthog.fullname" .) -}}
+{{- else -}}
+{{- include "posthog.serviceAccountName" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+ServiceAccount a pod runs as: services.<component>.serviceAccountName, then the object storage
+ServiceAccount for pods that read object storage credentials, then serviceAccount. Empty means the
+namespace's default.
+usage: include "posthog.podServiceAccountName" (list $ $component (include "posthog.usesObjectStorage" ...))
+*/}}
+{{- define "posthog.podServiceAccountName" -}}
+{{- $ := index . 0 -}}{{- $component := index . 1 -}}{{- $usesObjectStorage := index . 2 -}}
+{{- $ov := index $.Values.services $component | default dict -}}
+{{- if $ov.serviceAccountName -}}
+{{- $ov.serviceAccountName -}}
+{{- else if $usesObjectStorage -}}
+{{- include "posthog.objectStorageServiceAccountName" $ -}}
+{{- else -}}
+{{- include "posthog.serviceAccountName" $ -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Render a list of env entries from upstream.yaml (value / tpl / secret) plus extras.
 usage: include "posthog.env" (list $ $svcName $envList)
 */}}
@@ -186,7 +296,9 @@ usage: include "posthog.env" (list $ $svcName $envList)
 {{- range $env }}
 {{- if not (hasKey $skip .name) }}
 - name: {{ .name }}
-{{- if .secret }}
+{{- if and .secret (include "posthog.keylessStorageKey" (list $ .secret)) }}
+  value: ""
+{{- else if .secret }}
 {{- $ref := splitn "/" 2 (include "posthog.secretRef" (list $ .secret)) }}
   valueFrom:
     secretKeyRef:

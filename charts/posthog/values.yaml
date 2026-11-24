@@ -15,6 +15,20 @@ commonLabels: {}
 # -- Extra annotations on every pod.
 podAnnotations: {}
 
+# ServiceAccount every pod of the release runs as. Platforms that bind a cloud identity to a
+# ServiceAccount (workload identity) read it from annotations here. To give that identity only to the
+# services that use object storage, see objectStorage.serviceAccount.
+# services.<name>.serviceAccountName overrides the account for one upstream service.
+serviceAccount:
+  # -- Create the ServiceAccount.
+  create: false
+  # -- Name. Empty: the release fullname when `create` is true, otherwise the namespace's `default`.
+  name: ""
+  # -- Annotations on the created ServiceAccount, as your platform's workload identity expects them.
+  annotations: {}
+  # -- Extra labels on the created ServiceAccount.
+  labels: {}
+
 images:
   # -- Pin images to the digests recorded at sync time (repository:tag@sha256:...), and keep the digests of the
   # chart's own images (router, bundled PostgreSQL and SeaweedFS). Turn off to follow the tags.
@@ -160,6 +174,37 @@ objectStorage:
   existingSecret: ""
   accessKeyIdKey: accessKeyId
   secretAccessKeyKey: secretAccessKey
+  # -- `keys`: the access key above (or existingSecret). `serviceAccount`: no access key; every S3
+  # client falls back to the SDK's default credential chain, which picks up whatever identity the
+  # platform gives the pod's ServiceAccount (a web-identity token, a container credentials endpoint,
+  # ...), or the token from `webIdentity` below. Needs an external endpoint. cymbal (error tracking
+  # symbol sets) only recognises web-identity credentials: AWS_ROLE_ARN plus AWS_WEB_IDENTITY_TOKEN_FILE.
+  auth: keys
+  # A separate ServiceAccount for the services that read or write object storage, so the identity is
+  # not granted to every pod. Unset (no create, no name): those services use serviceAccount.
+  serviceAccount:
+    # -- Create it.
+    create: false
+    # -- Name. Empty with `create`: `<release fullname>-object-storage`.
+    name: ""
+    # -- Annotations on the created ServiceAccount, as your platform's workload identity expects them.
+    annotations: {}
+    # -- Extra labels on the created ServiceAccount.
+    labels: {}
+  # Web identity without a platform webhook: with auth `serviceAccount`, mount a projected token of the
+  # pod's ServiceAccount into the object storage services and point the S3 SDKs at it
+  # (AssumeRoleWithWebIdentity). For any S3 provider whose STS trusts the cluster's OIDC issuer.
+  webIdentity:
+    # -- Mount the token and set AWS_ROLE_ARN / AWS_WEB_IDENTITY_TOKEN_FILE.
+    enabled: false
+    # -- Role to assume (AWS_ROLE_ARN), in the provider's format.
+    roleArn: ""
+    # -- Audience of the token; must match what the provider's STS expects.
+    audience: sts.amazonaws.com
+    # -- Token lifetime; the kubelet rotates it before expiry.
+    expirationSeconds: 3600
+    # -- STS endpoint (AWS_ENDPOINT_URL_STS). Empty: the SDK default, for AWS.
+    stsEndpoint: ""
   # Bundled SeaweedFS (single node, no replication): evaluation only.
   bundled:
     enabled: true
@@ -175,6 +220,7 @@ objectStorage:
       limits: {memory: 1Gi}
 
 # Session replay blob storage. Defaults to objectStorage; set for a separate bucket/credentials.
+# With objectStorage.auth `serviceAccount` it uses the ServiceAccount too, unless keys are set here.
 sessionReplay:
   storage:
     endpoint: ""
@@ -325,7 +371,7 @@ authProxy:
 # topologySpreadConstraints, podSecurityContext, containerSecurityContext, readOnlyRootFilesystem,
 # readinessProbe (replaces the upstream handler; startupProbe follows it),
 # persistence: {size, storageClass, selector, extraOverrides: {<claim>: {size, storageClass, selector}}},
-# extraVolumes, extraVolumeMounts, priorityClassName, args, env.
+# extraVolumes, extraVolumeMounts, priorityClassName, serviceAccountName, args, env.
 # `selector` binds the claim to pre-provisioned PersistentVolumes (e.g. local volumes with a label);
 # zookeeper has a second claim named `datalog` which extraOverrides can target.
 services:

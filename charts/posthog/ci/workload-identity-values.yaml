@@ -1,0 +1,19 @@
+# Not installed in CI: rendered for kubeconform only. External S3 without access keys, a separate
+# ServiceAccount for the services that use object storage, and a projected web-identity token.
+objectStorage:
+  endpoint: https://s3.example.com
+  bucket: posthog
+  region: eu-central-1
+  forcePathStyle: false
+  bundled:
+    enabled: false
+  auth: serviceAccount
+  serviceAccount:
+    create: true
+    annotations:
+      example.com/identity: posthog-object-storage
+  webIdentity:
+    enabled: true
+    roleArn: arn:aws:iam::123456789012:role/posthog-object-storage
+serviceAccount:
+  create: true

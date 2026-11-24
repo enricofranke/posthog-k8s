@@ -59,6 +59,9 @@ spec:
     spec:
       {{- include "posthog.imagePullSecrets" . | nindent 6 }}
       automountServiceAccountToken: false
+      {{- with include "posthog.podServiceAccountName" (list . "gemini-gateway" "") }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532

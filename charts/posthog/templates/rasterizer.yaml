@@ -86,6 +86,10 @@ spec:
     spec:
       {{- include "posthog.imagePullSecrets" . | nindent 6 }}
       automountServiceAccountToken: false
+      {{- $webIdentity := include "posthog.webIdentity" (list . (include "posthog.usesObjectStorage" (list $env))) }}
+      {{- with include "posthog.podServiceAccountName" (list . "recording-rasterizer" (include "posthog.usesObjectStorage" (list $env))) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       {{- with $r.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
@@ -115,6 +119,9 @@ spec:
           {{- end }}
           env:
             {{- include "posthog.env" (list . "recording-rasterizer" $env) | nindent 12 }}
+            {{- if $webIdentity }}
+            {{- include "posthog.webIdentityEnv" . | nindent 12 }}
+            {{- end }}
             {{- with $r.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -137,6 +144,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if $webIdentity }}
+            {{- include "posthog.webIdentityVolumeMount" . | nindent 12 }}
+            {{- end }}
             {{- if not $r.chromeSandbox }}
             - name: chrome
               mountPath: /chart/rasterizer
@@ -145,6 +155,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if $webIdentity }}
+        {{- include "posthog.webIdentityVolume" . | nindent 8 }}
+        {{- end }}
         {{- if not $r.chromeSandbox }}
         - name: chrome
           configMap:

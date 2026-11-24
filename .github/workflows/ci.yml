@@ -32,6 +32,8 @@ jobs:
       - name: Generator tests
         run: make test-tools
       - name: Generated chart data is in sync with tools/rules.yaml
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: make sync-check
       - name: helm lint
         run: make lint

@@ -11,8 +11,9 @@ EXTRA_VALUES="${EXTRA_VALUES:-}"   # e.g. charts/posthog/ci/seed-values.yaml
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 # Fail fast: a pod that sits in CrashLoopBackOff with many restarts for several consecutive
-# checks is not going to recover; stop waiting for the full helm timeout.
-FAILFAST_RESTARTS="${FAILFAST_RESTARTS:-5}"
+# checks is not going to recover; stop waiting for the full helm timeout. The restart count has to
+# outlast a pod that crash-loops only until a dependency's image is pulled.
+FAILFAST_RESTARTS="${FAILFAST_RESTARTS:-8}"
 FAILFAST_STRIKES="${FAILFAST_STRIKES:-3}"
 declare -A strikes
 progress() {

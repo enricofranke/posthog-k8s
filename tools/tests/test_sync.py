@@ -313,3 +313,13 @@ def test_every_clickhouse_dev_password_is_replaced_by_the_chart():
     template = (chart / "templates" / "configmaps.yaml").read_text()
     missing = {user: pw for user, pw in plaintext.items() if f'replace "<password>{pw}</password>"' not in template}
     assert plaintext and not missing, f"templates/configmaps.yaml does not replace these ClickHouse passwords: {missing}"
+
+
+def test_github_token_is_sent_to_the_api_and_nowhere_else():
+    api = su.API.format(repo="PostHog/posthog", ref="a" * 40, path="docker")
+    raw = su.RAW.format(repo="PostHog/posthog", ref="a" * 40, path="docker-compose.base.yml")
+    assert su.request_headers(api, "t0ken")["Authorization"] == "Bearer t0ken"
+    assert "Authorization" not in su.request_headers(raw, "t0ken")
+    assert "Authorization" not in su.request_headers("https://api.github.com.example.org/x", "t0ken")
+    assert "Authorization" not in su.request_headers(api, "")
+

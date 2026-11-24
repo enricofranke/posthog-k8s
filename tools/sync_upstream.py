@@ -20,6 +20,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -48,6 +49,14 @@ class SyncError(Exception):
 # ----------------------------------------------------------------------------- fetching
 
 
+def request_headers(url: str, token: str) -> dict[str, str]:
+    """The token goes to the GitHub API only; anonymous calls there share a rate limit per IP."""
+    headers = {"User-Agent": "posthog-k8s-sync"}
+    if token and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 class Source:
     """Fetches upstream files, caching them on disk so a sync is reproducible offline."""
 
@@ -56,7 +65,7 @@ class Source:
         self.hashes: dict[str, str] = {}
 
     def _get(self, url: str) -> bytes:
-        req = urllib.request.Request(url, headers={"User-Agent": "posthog-k8s-sync"})
+        req = urllib.request.Request(url, headers=request_headers(url, os.environ.get("GITHUB_TOKEN", "")))
         with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310 - fixed https hosts
             return r.read()
 

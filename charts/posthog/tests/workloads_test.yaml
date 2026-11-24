@@ -453,3 +453,152 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content: {name: AI_GATEWAY_URL, value: "http://RELEASE-NAME-posthog-gemini-gateway:8080/v1"}
+
+  - it: leaves web on PostHog's image and without login settings while authProxy is off
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^posthog/posthog:[0-9a-f]{40}@sha256:[0-9a-f]{64}$
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_PROXY_ENABLED
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_PROXY_SECRET
+          any: true
+
+  - it: runs web on the overlay image with authProxy on
+    set: &authProxyOn
+      authProxy.enabled: true
+      authProxy.image: registry.example.com/posthog-web:4ba4b09d@sha256:0000000000000000000000000000000000000000000000000000000000000001
+      authProxy.groups:
+        platform-admins: {organizations: ["*"], level: admin}
+      networkPolicy.enabled: true
+      networkPolicy.appIngressFrom:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: oauth2-proxy}}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/posthog-web:4ba4b09d@sha256:0000000000000000000000000000000000000000000000000000000000000001
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: ^posthog/posthog:[0-9a-f]{40}@sha256:[0-9a-f]{64}$
+
+  - it: gives web the login settings, the shared secret by reference
+    set:
+      <<: *authProxyOn
+      authProxy.emailHeader: X-Auth-Request-Email
+      authProxy.passwordLogin: false
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_ENABLED, value: "true"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_PROXY_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-posthog-env
+                key: AUTH_PROXY_SECRET
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_SECRET_HEADER, value: X-Posthog-K8s-Auth-Proxy}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_USER_HEADER, value: X-Forwarded-User}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_EMAIL_HEADER, value: X-Auth-Request-Email}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_GROUPS_HEADER, value: X-Forwarded-Groups}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_GROUPS, value: '{"platform-admins":{"level":"admin","organizations":["*"]}}'}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: AUTH_PROXY_PASSWORD_LOGIN, value: "false"}
+
+  - it: reads web's shared secret from the same Secret as the router
+    set:
+      <<: *authProxyOn
+      secrets.keys.AUTH_PROXY_SECRET: {secret: sso, key: router-secret}
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_PROXY_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: sso
+                key: router-secret
+
+  - it: keeps the overlay image and the login settings away from the other services
+    set: *authProxyOn
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: worker
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^posthog/posthog:[0-9a-f]{40}@sha256:[0-9a-f]{64}$
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_PROXY_SECRET
+          any: true
+
+  - it: fails with authProxy on and no overlay image
+    set:
+      <<: *authProxyOn
+      authProxy.image: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "authProxy.enabled needs authProxy.image"
+
+  - it: follows the overlay image's tag with images.pinDigests off
+    set:
+      <<: *authProxyOn
+      images.pinDigests: false
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/posthog-web:4ba4b09d
+
+  - it: takes an overlay image without a digest as is
+    set:
+      <<: *authProxyOn
+      authProxy.image: registry.example.com/posthog-web:own-build
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: web
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/posthog-web:own-build
+
+  - it: rejects an overlay image reference that is not one
+    set:
+      authProxy.image: "posthog web:latest"
+    asserts:
+      - failedTemplate:
+          errorPattern: "image"

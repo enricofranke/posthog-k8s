@@ -7,19 +7,32 @@ chart data was generated from.
 ## [Unreleased]
 
 ### Added
-- Trusted-header login, router side ([docs/auth-proxy.md](docs/auth-proxy.md)). With
-  `authProxy.enabled` the router's app listener adds `X-Posthog-K8s-Auth-Proxy` with a shared secret
-  to what it forwards to `web`, replacing any copy the client sent, so that `web` can tell proxy
-  traffic from requests other pods send to it directly. The login backend (overlay image) is not
-  part of this change: nothing reads the header yet.
+- Trusted-header login ([docs/auth-proxy.md](docs/auth-proxy.md)): with `authProxy.enabled`, users
+  an authenticating proxy asserts on the app listener are logged in, and their member and admin
+  memberships follow the proxy's groups (`authProxy.groups`, organizations by slug or ID). Users
+  without a mapped group get 403 and no account; owner is never granted or removed; a user left
+  without an organization is deactivated and reactivated when access comes back.
+- The login is a Django module (`overlay/`) delivered as an overlay image for `web`
+  (`authProxy.image`, built on the pinned PostHog image). The value is empty until an image is
+  published for the chart's appVersion; `authProxy.enabled` then needs your own build. The image
+  tag names the PostHog commit and a hash of the module, the build refuses a base that is not
+  pinned by digest, and the module is root-owned and read-only in the image.
+- `authProxy.passwordLogin: false` turns off PostHog's own ways in (login, signup, invite
+  acceptance, password reset, email verification, passkey, social and partner login).
+- The router's app listener adds `X-Posthog-K8s-Auth-Proxy` with a shared secret to what it
+  forwards to `web`, replacing any copy the client sent, so that `web` can tell proxy traffic from
+  requests other pods send to it directly. `web` ignores the identity headers without it, answers
+  400 when one of them or the secret header occurs more than once or under another spelling
+  (`X_Forwarded_Groups`), and takes the secret off the request once it is checked.
 - `AUTH_PROXY_SECRET`: `authProxy.sharedSecret`, generated when empty, read from
   `posthog.existingSecret` or mapped with `secrets.keys.AUTH_PROXY_SECRET`. Caddy reads it from its
-  environment; the router does not start with an empty one.
-- `authProxy.emailHeader` (accounts are matched by email), `authProxy.passwordLogin` (read by the
-  overlay image). `authProxy.groups` references organizations by slug or ID.
+  environment; neither the router nor `web` starts with one that is empty, shorter than 32
+  characters, or not printable ASCII.
+- `authProxy.emailHeader`: accounts are matched by email, so the proxy must only assert verified
+  addresses.
 - `values.schema.json` for `authProxy` and `networkPolicy`: unknown `authProxy` keys, header names
-  with an underscore, a `level` other than member/admin and peers that are not NetworkPolicy peers
-  are rejected at render time.
+  with an underscore or set to null, an inline `sharedSecret` shorter than 32 characters, a `level`
+  other than member/admin and peers that are not NetworkPolicy peers are rejected at render time.
 
 ### Changed
 - The ingest listener always strips `authProxy.userHeader`, `emailHeader`, `groupsHeader` and the

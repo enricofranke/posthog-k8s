@@ -77,7 +77,11 @@ spec:
       {{- end }}
       containers:
         - name: {{ $component }}
+          {{- if and (eq $name "web") $root.Values.authProxy.enabled }}
+          image: {{ include "posthog.authProxyImage" $root | quote }}
+          {{- else }}
           image: {{ include "posthog.image" (list $root $svc.image) | quote }}
+          {{- end }}
           imagePullPolicy: IfNotPresent
           {{- with $svc.command }}
           command:
@@ -92,7 +96,7 @@ spec:
             {{- end }}
           {{- end }}
           env:
-            {{- include "posthog.env" (list $root $name (concat $svc.env (include "posthog.geminiGatewayClientEnv" (list $root $name) | fromYamlArray))) | nindent 12 }}
+            {{- include "posthog.env" (list $root $name (concat $svc.env (include "posthog.geminiGatewayClientEnv" (list $root $name) | fromYamlArray) (include "posthog.authProxyWebEnv" (list $root $name) | fromYamlArray))) | nindent 12 }}
             {{- if eq $name "clickhouse" }}
             {{- range $u, $k := dict "api" "CLICKHOUSE_API_PASSWORD" "app" "CLICKHOUSE_APP_PASSWORD" "billing" "CLICKHOUSE_BILLING_PASSWORD" "dict_reader" "CLICKHOUSE_DICT_READER_PASSWORD" "signals" "CLICKHOUSE_SIGNALS_PASSWORD" }}
             {{- $ref := splitn "/" 2 (include "posthog.secretRef" (list $root $k)) }}

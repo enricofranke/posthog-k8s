@@ -435,6 +435,33 @@ router.stripHeaders, as a JSON list without duplicates (header names are case-in
 {{- toJson $out -}}
 {{- end -}}
 
+{{/* Overlay image of web with authProxy.enabled. No fallback to PostHog's image: that one has no login module. */}}
+{{- define "posthog.authProxyImage" -}}
+{{- if not .Values.authProxy.image -}}
+{{- fail "authProxy.enabled needs authProxy.image: no overlay image is published for this appVersion yet. Build one (make overlay-build) and set authProxy.image" -}}
+{{- end -}}
+{{- include "posthog.chartImage" (list . .Values.authProxy.image) -}}
+{{- end -}}
+
+{{/* Environment the login module reads in web (overlay/posthog_k8s_authproxy/core.py: load_config). */}}
+{{- define "posthog.authProxyWebEnv" -}}
+{{- $ := index . 0 -}}{{- $svc := index . 1 -}}
+{{- $ap := $.Values.authProxy -}}
+{{- if and $ap.enabled (eq $svc "web") -}}
+{{- toYaml (list
+  (dict "name" "AUTH_PROXY_ENABLED" "value" "true")
+  (dict "name" "AUTH_PROXY_SECRET" "secret" "AUTH_PROXY_SECRET")
+  (dict "name" "AUTH_PROXY_SECRET_HEADER" "value" (include "posthog.authProxySecretHeader" $))
+  (dict "name" "AUTH_PROXY_USER_HEADER" "value" $ap.userHeader)
+  (dict "name" "AUTH_PROXY_EMAIL_HEADER" "value" $ap.emailHeader)
+  (dict "name" "AUTH_PROXY_GROUPS_HEADER" "value" $ap.groupsHeader)
+  (dict "name" "AUTH_PROXY_GROUPS" "value" (toJson $ap.groups))
+  (dict "name" "AUTH_PROXY_PASSWORD_LOGIN" "value" (toString $ap.passwordLogin))) -}}
+{{- else -}}
+[]
+{{- end -}}
+{{- end -}}
+
 {{/*
 authProxy trusts whoever reaches the router's app listener, so it only renders with a NetworkPolicy
 that names those peers.

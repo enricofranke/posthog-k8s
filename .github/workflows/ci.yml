@@ -31,6 +31,10 @@ jobs:
           helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.0.1
       - name: Generator tests
         run: make test-tools
+      - name: Login module tests
+        run: make test-overlay
+      - name: authProxy.image is the overlay of the locked upstream commit
+        run: make overlay-check
       - name: Generated chart data is in sync with tools/rules.yaml
         env:
           GITHUB_TOKEN: ${{ github.token }}

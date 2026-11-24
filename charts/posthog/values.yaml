@@ -288,28 +288,36 @@ geminiGateway:
     extraEgress: []
 
 # Trusted-header login: log users in from headers set by an authenticating proxy (Teleport,
-# oauth2-proxy, Authelia, Pomerium). The router side is in place; the login itself needs the auth
-# overlay image, which is not published yet (docs/auth-proxy.md lists what works today).
+# oauth2-proxy, Authelia, Pomerium), see docs/auth-proxy.md.
 authProxy:
-  # -- Have the router's app listener mark requests to web with the shared secret. Needs
+  # -- Log in the user the proxy asserts. `web` then runs the overlay image (`authProxy.image`), and
+  # the router's app listener marks what it forwards to `web` with the shared secret. Needs
   # `networkPolicy.enabled` and a non-empty `networkPolicy.appIngressFrom`; rendering fails otherwise.
   enabled: false
-  # -- Header with the proxy's name for the user (username or subject).
+  # -- Overlay image for `web`: PostHog's image at the chart's appVersion plus the login module
+  # (overlay/). Written by the release process as repository:<make overlay-tag>@sha256:...; empty while no image is
+  # published for this appVersion, and rendering then fails with `enabled: true`. Set it to your
+  # own build (`make overlay-build`) to use one; a tag without a digest follows the tag.
+  image: ""
+  # -- Header with the proxy's name for the user. Only the display name of a newly created account;
+  # it never selects or changes one.
   userHeader: X-Forwarded-User
   # -- Header with the email address; accounts are matched by it. The proxy must only assert
   # verified addresses.
   emailHeader: X-Forwarded-Email
   # -- Header with the comma-separated groups of the user.
   groupsHeader: X-Forwarded-Groups
-  # -- Shared secret between the router and web (AUTH_PROXY_SECRET); generated when empty. Under
-  # Argo CD put it in posthog.existingSecret or map it with secrets.keys.AUTH_PROXY_SECRET.
+  # -- Shared secret between the router and web (AUTH_PROXY_SECRET), at least 32 characters;
+  # generated when empty. Under Argo CD put it in posthog.existingSecret or map it with
+  # secrets.keys.AUTH_PROXY_SECRET.
   sharedSecret: ""
   # -- Group -> organization memberships. Organizations are referenced by slug or ID and must
   # exist; `"*"` is every organization. `level` is member or admin.
   # Example: {platform-admins: {organizations: ["*"], level: admin}, acme-developers: {organizations: [acme], level: member}}
   groups: {}
-  # -- Keep PostHog's password login, signup, password reset and invite acceptance next to the
-  # proxy login. Read by the overlay image.
+  # -- Keep PostHog's own ways in next to the proxy login: password and passkey login, signup,
+  # invite acceptance, password reset, email verification and social login. `false` answers them
+  # with 403; docs/auth-proxy.md has the break-glass path.
   passwordLogin: true
 
 # Per-service overrides keyed by upstream service name (see upstream.yaml). Every service accepts:

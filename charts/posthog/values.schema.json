@@ -27,15 +27,21 @@
     "authProxy": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["enabled", "userHeader", "emailHeader", "groupsHeader"],
       "properties": {
         "enabled": {"type": "boolean"},
+        "image": {
+          "description": "repository:tag, optionally with @sha256:<digest>.",
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][A-Za-z0-9._/:-]*(@sha256:[0-9a-f]{64})?$"
+        },
         "userHeader": {"$ref": "#/definitions/headerName"},
         "emailHeader": {"$ref": "#/definitions/headerName"},
         "groupsHeader": {"$ref": "#/definitions/headerName"},
         "sharedSecret": {
-          "description": "Sent as a header value: printable ASCII without spaces.",
+          "description": "Sent as a header value: empty (generated) or at least 32 printable ASCII characters without spaces.",
           "type": "string",
-          "pattern": "^[!-~]*$"
+          "pattern": "^$|^[!-~]{32,}$"
         },
         "groups": {
           "type": "object",

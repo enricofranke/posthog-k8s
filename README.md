@@ -418,9 +418,9 @@ Point your proxy (Teleport Application Access, oauth2-proxy, Pomerium, Authelia,
 Access) at `<release>-router:8080` and expose `<release>-router:8081` publicly for SDK traffic.
 The ingest listener answers 404 for anything that is not an SDK path and strips identity headers
 (the `authProxy.*Header` names plus `router.stripHeaders`). With `networkPolicy.enabled` the app
-listener accepts `networkPolicy.appIngressFrom` only. Header-based automatic login and group →
-organization mapping is the next milestone: the router side is in place, the login backend is
-not yet; see [docs/auth-proxy.md](docs/auth-proxy.md). A complete Teleport example lives in
+listener accepts `networkPolicy.appIngressFrom` only. With `authProxy.enabled` the users the proxy
+asserts are logged in automatically and their organization memberships follow its groups; see
+[docs/auth-proxy.md](docs/auth-proxy.md). A complete Teleport example lives in
 [docs/production.md](docs/production.md#teleport-example).
 
 </details>
@@ -497,8 +497,9 @@ charts/posthog/           the chart (templates are generic, data is generated)
   ci/kind-values.yaml     values for the CI end-to-end run
   tests/                  helm-unittest suites
 tools/                    generator + rules + tests
+overlay/                  trusted-header login: Django module, tests and the Dockerfile of the web overlay image
 e2e/                      install/smoke/seed scripts used by CI
-docs/                     production, Argo CD, troubleshooting, auth proxy roadmap
+docs/                     production, Argo CD, troubleshooting, auth proxy
 ```
 
 </details>
@@ -512,4 +513,6 @@ them first. Security reports: [SECURITY.md](SECURITY.md).
 
 Apache-2.0 for everything in this repository. PostHog is MIT-licensed except the `ee/`
 directory, which has its own license; the chart uses PostHog's public images unmodified and
-does not enable enterprise features. "PostHog" is a trademark of PostHog Inc.
+does not enable enterprise features. The one exception is opt-in: with `authProxy.enabled`, `web`
+runs an overlay image that adds a login module on top of PostHog's image and leaves `ee/` alone
+([docs/auth-proxy.md](docs/auth-proxy.md)). "PostHog" is a trademark of PostHog Inc.

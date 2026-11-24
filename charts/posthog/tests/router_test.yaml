@@ -111,7 +111,7 @@ tests:
   - it: sets the shared-secret header on the app listener's requests to web only
     set: &authProxyOn
       authProxy.enabled: true
-      authProxy.sharedSecret: not-in-the-configmap
+      authProxy.sharedSecret: not-in-the-configmap-0123456789abcdef
       networkPolicy.enabled: true
       networkPolicy.appIngressFrom:
         - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: oauth2-proxy}}
@@ -130,7 +130,7 @@ tests:
           pattern: '(?s)header_up.*header_up'
       - notMatchRegex:
           path: data.Caddyfile
-          pattern: not-in-the-configmap
+          pattern: not-in-the-configmap-0123456789abcdef
 
   - it: hands the shared secret to caddy through the environment and refuses to start without it
     set: *authProxyOn
@@ -149,7 +149,7 @@ tests:
           value: [/bin/sh, -ec]
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: '\[ -n "\$AUTH_PROXY_SECRET" \] \|\| \{ .* exit 1; \}\ncase "\$AUTH_PROXY_SECRET" in \*\[!!-~\]\*\) .* exit 1 ;; esac\nexec caddy run'
+          pattern: '\[ -n "\$AUTH_PROXY_SECRET" \] \|\| \{ .* exit 1; \}\n\[ "\$\{#AUTH_PROXY_SECRET\}" -ge 32 \] \|\| \{ .* exit 1; \}\ncase "\$AUTH_PROXY_SECRET" in \*\[!!-~\]\*\) .* exit 1 ;; esac\nexec caddy run'
 
   - it: reads the shared secret from posthog.existingSecret
     set:
@@ -229,6 +229,21 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "userHeader"
+
+  - it: rejects a shared secret shorter than 32 characters
+    set:
+      authProxy.sharedSecret: only-31-characters-0123456789ab
+    asserts:
+      - failedTemplate:
+          errorPattern: "sharedSecret"
+
+  - it: names the header that was set to null
+    set:
+      <<: *authProxyOn
+      authProxy.userHeader: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "userHeader is required|missing property 'userHeader'"
 
   - it: rejects owner as a group level
     set:

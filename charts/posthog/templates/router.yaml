@@ -155,6 +155,7 @@ spec:
           args:
             - |
               [ -n "$AUTH_PROXY_SECRET" ] || { echo "AUTH_PROXY_SECRET is empty" >&2; exit 1; }
+              [ "${#AUTH_PROXY_SECRET}" -ge 32 ] || { echo "AUTH_PROXY_SECRET is shorter than 32 characters" >&2; exit 1; }
               case "$AUTH_PROXY_SECRET" in *[!!-~]*) echo "AUTH_PROXY_SECRET must be printable ASCII without spaces or line breaks (trailing newline in the Secret?)" >&2; exit 1 ;; esac
               exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
           {{- else }}
